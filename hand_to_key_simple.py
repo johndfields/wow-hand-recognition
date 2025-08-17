@@ -33,8 +33,10 @@ class GestureType(Enum):
     ONE_FINGER = "one_finger"  # Only index finger up
     TWO_FINGERS = "two_fingers"  # Index and middle up (victory/peace)
     THREE_FINGERS = "three_fingers"  # Index, middle, ring up
+    FOUR_FINGERS = "four_fingers"  # Index, middle, ring, pinky up (no thumb)
     THUMBS_UP = "thumbs_up"
     L_SHAPE = "l_shape"  # L gesture with thumb and index
+    HANG_LOOSE = "hang_loose"  # Thumb and pinky extended (shaka)
     PINCH_INDEX = "pinch_index"
     PINCH_MIDDLE = "pinch_middle"
     PINCH_RING = "pinch_ring"
@@ -86,6 +88,8 @@ class HandGestureDetector:
             gestures.add(GestureType.TWO_FINGERS.value)
         elif self._is_three_fingers(landmarks):
             gestures.add(GestureType.THREE_FINGERS.value)
+        elif self._is_four_fingers(landmarks):
+            gestures.add(GestureType.FOUR_FINGERS.value)
         elif self._is_open_palm(landmarks):
             gestures.add(GestureType.OPEN_PALM.value)
         elif self._is_fist(landmarks):
@@ -94,6 +98,8 @@ class HandGestureDetector:
             gestures.add(GestureType.THUMBS_UP.value)
         elif self._is_l_shape(landmarks):
             gestures.add(GestureType.L_SHAPE.value)
+        elif self._is_hang_loose(landmarks):
+            gestures.add(GestureType.HANG_LOOSE.value)
         
         return gestures
     
@@ -163,6 +169,14 @@ class HandGestureDetector:
                 not self._finger_extended(landmarks, 20, 18) and
                 not self._thumb_extended(landmarks))
     
+    def _is_four_fingers(self, landmarks) -> bool:
+        """Detect four fingers up (index, middle, ring, pinky - no thumb)."""
+        return (self._finger_extended(landmarks, 8, 6) and 
+                self._finger_extended(landmarks, 12, 10) and
+                self._finger_extended(landmarks, 16, 14) and
+                self._finger_extended(landmarks, 20, 18) and
+                not self._thumb_extended(landmarks))
+    
     def _is_thumbs_up(self, landmarks) -> bool:
         """Detect thumbs up gesture."""
         return (self._thumb_extended(landmarks) and
@@ -191,6 +205,20 @@ class HandGestureDetector:
             diag = self._bbox_diag(landmarks)
             return distance > 0.15 * diag  # Thumb is extended away
         return False
+    
+    def _is_hang_loose(self, landmarks) -> bool:
+        """Detect hang loose/shaka gesture (thumb and pinky extended, others closed)."""
+        # Thumb should be extended
+        thumb_extended = self._thumb_extended(landmarks)
+        # Pinky should be extended
+        pinky_extended = self._finger_extended(landmarks, 20, 18)
+        # Other fingers should be closed
+        index_closed = not self._finger_extended(landmarks, 8, 6)
+        middle_closed = not self._finger_extended(landmarks, 12, 10)
+        ring_closed = not self._finger_extended(landmarks, 16, 14)
+        
+        return (thumb_extended and pinky_extended and 
+                index_closed and middle_closed and ring_closed)
     
     def _is_pinch(self, landmarks, tip_idx: int) -> bool:
         """Detect pinch gesture with specific finger."""
@@ -375,14 +403,15 @@ class HandToKeyApp:
                 'open_palm': {'action': 'key', 'target': 'w', 'mode': 'hold'},
                 'fist': {'action': 'key', 'target': 's', 'mode': 'hold'},
                 'l_shape': {'action': 'key', 'target': 'a', 'mode': 'hold'},  # L shape for left
-                'one_finger': {'action': 'key', 'target': '1', 'mode': 'tap'},
-                'two_fingers': {'action': 'key', 'target': '2', 'mode': 'tap'},
-                'three_fingers': {'action': 'key', 'target': '3', 'mode': 'tap'},
-                'thumbs_up': {'action': 'key', 'target': 'space', 'mode': 'tap'},
-                'pinch_index': {'action': 'key', 'target': '4', 'mode': 'tap'},
-                'pinch_middle': {'action': 'key', 'target': '5', 'mode': 'tap'},
-                'pinch_ring': {'action': 'key', 'target': '6', 'mode': 'tap'},
-                'pinch_pinky': {'action': 'key', 'target': '7', 'mode': 'tap'}
+                'hang_loose': {'action': 'key', 'target': 'd', 'mode': 'hold'},  # Hang loose for right
+                'one_finger': {'action': 'mouse', 'target': 'right_click', 'mode': 'tap'},
+                'two_fingers': {'action': 'key', 'target': 'a', 'mode': 'hold'},
+                'three_fingers': {'action': 'key', 'target': 'd', 'mode': 'hold'},
+                'thumbs_up': {'action': 'key', 'target': 'tab', 'mode': 'tap'},
+                'pinch_index': {'action': 'key', 'target': '1', 'mode': 'tap'},
+                'pinch_middle': {'action': 'key', 'target': '2', 'mode': 'tap'},
+                'pinch_ring': {'action': 'key', 'target': '3', 'mode': 'tap'},
+                'pinch_pinky': {'action': 'key', 'target': '4', 'mode': 'tap'}
             }
         }
         
@@ -539,9 +568,11 @@ class HandToKeyApp:
             'open_palm': 'Open Palm',
             'fist': 'Fist',
             'l_shape': 'L Shape',
+            'hang_loose': 'Hang Loose 🤙',
             'one_finger': 'One Finger',
             'two_fingers': 'Two Fingers',
             'three_fingers': 'Three Fingers',
+            'four_fingers': 'Four Fingers',
             'thumbs_up': 'Thumbs Up',
             'pinch_index': 'Pinch Index',
             'pinch_middle': 'Pinch Middle',

@@ -69,8 +69,8 @@ python src/main.py --threading --adaptive --hot-reload
 |---------|---------------|------|
 | Open Palm | W (forward) | Hold |
 | Fist | S (backward) | Hold |
-| Victory (✌️) | A (left) | Hold |
-| Three Fingers | D (right) | Hold |
+| L Shape | A (left) | Hold |
+| Hang Loose (🤙) | D (right) | Hold |
 | Index Only | Right Click | Tap |
 | Thumbs Up | Tab | Tap |
 | Pinch Index | 1 | Tap |

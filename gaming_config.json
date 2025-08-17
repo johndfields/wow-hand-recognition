@@ -24,7 +24,7 @@
       "target": "a",
       "mode": "hold"
     },
-    "three": {
+    "hang_loose": {
       "action": "key",
       "target": "d",
       "mode": "hold"
