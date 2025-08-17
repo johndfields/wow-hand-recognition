@@ -1,0 +1,108 @@
+{
+  "name": "Presentation",
+  "description": "Optimized for presentations with slide navigation",
+  "gesture_mappings": [
+    {
+      "gesture": "swipe_left",
+      "action_type": "key",
+      "target": "left",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "swipe_right",
+      "action_type": "key",
+      "target": "right",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "open_palm",
+      "action_type": "key",
+      "target": "f5",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "fist",
+      "action_type": "key",
+      "target": "escape",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "index_only",
+      "action_type": "mouse",
+      "target": "left_click",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "victory",
+      "action_type": "key",
+      "target": "b",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "thumbs_up",
+      "action_type": "key",
+      "target": "home",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "pinch_index",
+      "action_type": "key",
+      "target": "1",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "pinch_middle",
+      "action_type": "key",
+      "target": "2",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    }
+  ],
+  "settings": {},
+  "parent_profile": null,
+  "is_active": false
+}

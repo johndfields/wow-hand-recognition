@@ -1,0 +1,119 @@
+{
+  "name": "Productivity",
+  "description": "Optimized for productivity with shortcuts and navigation",
+  "gesture_mappings": [
+    {
+      "gesture": "swipe_left",
+      "action_type": "key",
+      "target": "alt+left",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "swipe_right",
+      "action_type": "key",
+      "target": "alt+right",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "swipe_up",
+      "action_type": "key",
+      "target": "page_up",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "swipe_down",
+      "action_type": "key",
+      "target": "page_down",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "pinch_index",
+      "action_type": "key",
+      "target": "ctrl+c",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "pinch_middle",
+      "action_type": "key",
+      "target": "ctrl+v",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "pinch_ring",
+      "action_type": "key",
+      "target": "ctrl+z",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "pinch_pinky",
+      "action_type": "key",
+      "target": "ctrl+y",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "open_palm",
+      "action_type": "key",
+      "target": "ctrl+s",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "fist",
+      "action_type": "key",
+      "target": "escape",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    }
+  ],
+  "settings": {},
+  "parent_profile": null,
+  "is_active": false
+}
