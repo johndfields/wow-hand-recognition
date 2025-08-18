@@ -57,6 +57,10 @@ class GestureType(Enum):
     SWIPE_RIGHT = "swipe_right"
     SWIPE_UP = "swipe_up"
     SWIPE_DOWN = "swipe_down"
+    
+    # Additional gestures for gaming profile
+    L_SHAPE = "l_shape"
+    HANG_LOOSE = "hang_loose"
 
 
 @dataclass
@@ -112,6 +116,9 @@ class StandardGestureDetector(GestureDetectorBase):
         # Advanced gestures have high priority
         GestureType.OK_SIGN: 10,
         GestureType.ROCK_ON: 10,
+        # Gaming profile gestures
+        GestureType.L_SHAPE: 8,
+        GestureType.HANG_LOOSE: 8,
         # Basic hand shapes have medium priority
         GestureType.THUMBS_UP: 8,
         GestureType.VICTORY: 7,
@@ -134,11 +141,16 @@ class StandardGestureDetector(GestureDetectorBase):
          GestureType.PINCH_RING, GestureType.PINCH_PINKY},
         # Basic hand shapes are mutually exclusive
         {GestureType.OPEN_PALM, GestureType.FIST, GestureType.VICTORY, 
-         GestureType.THREE, GestureType.INDEX_ONLY, GestureType.THUMBS_UP},
+         GestureType.THREE, GestureType.INDEX_ONLY, GestureType.THUMBS_UP,
+         GestureType.L_SHAPE, GestureType.HANG_LOOSE},
         # OK sign conflicts with pinch index
         {GestureType.OK_SIGN, GestureType.PINCH_INDEX},
         # Rock on conflicts with certain gestures
         {GestureType.ROCK_ON, GestureType.OPEN_PALM, GestureType.FIST},
+        # L_SHAPE conflicts with certain gestures
+        {GestureType.L_SHAPE, GestureType.VICTORY, GestureType.THREE, GestureType.ROCK_ON},
+        # HANG_LOOSE conflicts with certain gestures
+        {GestureType.HANG_LOOSE, GestureType.ROCK_ON, GestureType.THUMBS_UP},
     ]
     
     # Minimum confidence threshold for gesture detection
@@ -181,6 +193,10 @@ class StandardGestureDetector(GestureDetectorBase):
             gestures.add(GestureType.OK_SIGN)
         if self._is_rock_on(landmarks):
             gestures.add(GestureType.ROCK_ON)
+        if self._is_l_shape(landmarks):
+            gestures.add(GestureType.L_SHAPE)
+        if self._is_hang_loose(landmarks):
+            gestures.add(GestureType.HANG_LOOSE)
             
         # Basic gesture detection - skip open palm if pinch is detected
         if not has_pinch and self._is_open_palm(landmarks):
@@ -468,6 +484,22 @@ class StandardGestureDetector(GestureDetectorBase):
     def _is_rock_on(self, landmarks: List[Any]) -> bool:
         """Detect rock on gesture (index and pinky extended)."""
         return (self._finger_extended(landmarks, 8, 6) and
+                not self._finger_extended(landmarks, 12, 10) and
+                not self._finger_extended(landmarks, 16, 14) and
+                self._finger_extended(landmarks, 20, 18))
+                
+    def _is_l_shape(self, landmarks: List[Any]) -> bool:
+        """Detect L shape gesture (thumb and index extended at right angle)."""
+        return (self._thumb_extended(landmarks) and
+                self._finger_extended(landmarks, 8, 6) and
+                not self._finger_extended(landmarks, 12, 10) and
+                not self._finger_extended(landmarks, 16, 14) and
+                not self._finger_extended(landmarks, 20, 18))
+                
+    def _is_hang_loose(self, landmarks: List[Any]) -> bool:
+        """Detect hang loose gesture (thumb and pinky extended, middle fingers closed)."""
+        return (self._thumb_extended(landmarks) and
+                not self._finger_extended(landmarks, 8, 6) and
                 not self._finger_extended(landmarks, 12, 10) and
                 not self._finger_extended(landmarks, 16, 14) and
                 self._finger_extended(landmarks, 20, 18))

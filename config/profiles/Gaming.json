@@ -7,113 +7,76 @@
       "action_type": "key",
       "target": "w",
       "mode": "hold",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
+      "enabled": true
     },
     {
       "gesture": "fist",
       "action_type": "key",
       "target": "s",
       "mode": "hold",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
+      "enabled": true
     },
     {
-      "gesture": "victory",
+      "gesture": "l_shape",
       "action_type": "key",
       "target": "a",
       "mode": "hold",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
+      "enabled": true
     },
     {
-      "gesture": "three",
+      "gesture": "hang_loose",
       "action_type": "key",
       "target": "d",
       "mode": "hold",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
-    },
-    {
-      "gesture": "thumbs_up",
-      "action_type": "key",
-      "target": "space",
-      "mode": "tap",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
-    },
-    {
-      "gesture": "pinch_index",
-      "action_type": "key",
-      "target": "1",
-      "mode": "tap",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
-    },
-    {
-      "gesture": "pinch_middle",
-      "action_type": "key",
-      "target": "2",
-      "mode": "tap",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
-    },
-    {
-      "gesture": "pinch_ring",
-      "action_type": "key",
-      "target": "3",
-      "mode": "tap",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
-    },
-    {
-      "gesture": "pinch_pinky",
-      "action_type": "key",
-      "target": "4",
-      "mode": "tap",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
+      "enabled": true
     },
     {
       "gesture": "index_only",
       "action_type": "mouse",
       "target": "right_click",
       "mode": "tap",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
+      "enabled": true
+    },
+    {
+      "gesture": "thumbs_up",
+      "action_type": "key",
+      "target": "tab",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_index",
+      "action_type": "key",
+      "target": "1",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_middle",
+      "action_type": "key",
+      "target": "2",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_ring",
+      "action_type": "key",
+      "target": "3",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_pinky",
+      "action_type": "key",
+      "target": "4",
+      "mode": "tap",
+      "enabled": true
     }
   ],
-  "settings": {},
-  "parent_profile": null,
-  "is_active": true
+  "settings": {
+    "gesture_sensitivity": 1.0,
+    "min_gesture_frames": 3,
+    "confidence_threshold": 0.6
+  }
 }
+

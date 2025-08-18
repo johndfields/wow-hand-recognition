@@ -667,14 +667,14 @@ class ConfigurationManager:
         gaming_mappings = [
             GestureMapping("open_palm", "key", "w", "hold"),
             GestureMapping("fist", "key", "s", "hold"),
-            GestureMapping("victory", "key", "a", "hold"),
-            GestureMapping("three", "key", "d", "hold"),
-            GestureMapping("thumbs_up", "key", "space", "tap"),
+            GestureMapping("l_shape", "key", "a", "hold"),
+            GestureMapping("hang_loose", "key", "d", "hold"),
+            GestureMapping("index_only", "mouse", "right_click", "tap"),
+            GestureMapping("thumbs_up", "key", "tab", "tap"),
             GestureMapping("pinch_index", "key", "1", "tap"),
             GestureMapping("pinch_middle", "key", "2", "tap"),
             GestureMapping("pinch_ring", "key", "3", "tap"),
-            GestureMapping("pinch_pinky", "key", "4", "tap"),
-            GestureMapping("index_only", "mouse", "right_click", "tap")
+            GestureMapping("pinch_pinky", "key", "4", "tap")
         ]
         
         gaming_profile.gesture_mappings = gaming_mappings

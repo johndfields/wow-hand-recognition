@@ -310,9 +310,14 @@ class KeyboardHandler(InputHandlerBase):
             'page_down': Key.page_down, 'pagedown': Key.page_down,
             'shift': Key.shift, 'ctrl': Key.ctrl, 'control': Key.ctrl,
             'alt': Key.alt, 'cmd': Key.cmd, 'win': Key.cmd, 'windows': Key.cmd,
-            'caps_lock': Key.caps_lock, 'capslock': Key.caps_lock,
-            'menu': Key.menu
+            'caps_lock': Key.caps_lock, 'capslock': Key.caps_lock
         }
+        
+        # Add menu key if available (not available on macOS)
+        try:
+            mapping['menu'] = Key.menu
+        except AttributeError:
+            logger.debug("Key 'menu' not available on this platform, skipping")
         
         # Add platform-specific keys if they exist
         # These keys may not be available on all platforms (especially macOS)
