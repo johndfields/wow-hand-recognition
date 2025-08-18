@@ -721,16 +721,78 @@ class GestureProcessor:
             'gesture_stability': 0.0
         }
         
-        # Initialize MediaPipe Hands with error handling
+        # Initialize MediaPipe Hands with error handling and platform-specific optimizations
         try:
-            self.hands = self.mp_hands.Hands(
-                static_image_mode=False,
-                max_num_hands=self.max_hands,
-                model_complexity=1 if not enable_gpu else 2,
-                min_detection_confidence=confidence_threshold,
-                min_tracking_confidence=confidence_threshold
-            )
-            self.mediapipe_initialized = True
+            import platform
+            
+            # Platform-specific MediaPipe initialization
+            if platform.system() == "Darwin":  # macOS
+                # On macOS, we need special handling for Metal GPU backend
+                # First try with a more stable configuration
+                try:
+                    logger.info("Initializing MediaPipe with optimized settings for macOS")
+                    
+                    # Pre-initialize Metal context with a simple operation
+                    # This helps ensure the GPU context is ready before MediaPipe tries to use it
+                    if enable_gpu:
+                        import cv2
+                        test_frame = np.zeros((64, 64, 3), dtype=np.uint8)
+                        gpu_mat = cv2.UMat(test_frame)
+                        _ = cv2.GaussianBlur(gpu_mat, (5, 5), 0)
+                        logger.info("Metal GPU context pre-initialized successfully")
+                    
+                    # Use a more stable configuration for macOS
+                    self.hands = self.mp_hands.Hands(
+                        static_image_mode=False,
+                        max_num_hands=self.max_hands,
+                        model_complexity=1,  # Start with lower complexity even with GPU
+                        min_detection_confidence=confidence_threshold,
+                        min_tracking_confidence=confidence_threshold
+                    )
+                    
+                    # Test the initialization with a dummy frame to ensure it's working
+                    test_frame = np.zeros((64, 64, 3), dtype=np.uint8)
+                    _ = self.hands.process(test_frame)
+                    
+                    # If we get here, basic initialization succeeded
+                    # Now try to upgrade to higher complexity if GPU is enabled
+                    if enable_gpu:
+                        logger.info("Upgrading to higher model complexity on macOS")
+                        self.hands = self.mp_hands.Hands(
+                            static_image_mode=False,
+                            max_num_hands=self.max_hands,
+                            model_complexity=2,  # Higher complexity with GPU
+                            min_detection_confidence=confidence_threshold,
+                            min_tracking_confidence=confidence_threshold
+                        )
+                        # Test again with the higher complexity model
+                        _ = self.hands.process(test_frame)
+                    
+                    logger.info("MediaPipe initialized successfully on macOS")
+                    self.mediapipe_initialized = True
+                except Exception as mac_e:
+                    logger.warning(f"Optimized macOS initialization failed: {mac_e}")
+                    logger.info("Falling back to standard initialization")
+                    
+                    # Fall back to standard initialization with lower complexity
+                    self.hands = self.mp_hands.Hands(
+                        static_image_mode=False,
+                        max_num_hands=self.max_hands,
+                        model_complexity=1,  # Always use lower complexity as fallback
+                        min_detection_confidence=confidence_threshold,
+                        min_tracking_confidence=confidence_threshold
+                    )
+                    self.mediapipe_initialized = True
+            else:
+                # Standard initialization for other platforms
+                self.hands = self.mp_hands.Hands(
+                    static_image_mode=False,
+                    max_num_hands=self.max_hands,
+                    model_complexity=1 if not enable_gpu else 2,
+                    min_detection_confidence=confidence_threshold,
+                    min_tracking_confidence=confidence_threshold
+                )
+                self.mediapipe_initialized = True
         except Exception as e:
             logger.error(f"Error initializing MediaPipe Hands: {e}")
             logger.warning("Falling back to basic gesture detection without MediaPipe")
@@ -775,9 +837,37 @@ class GestureProcessor:
             # Convert to RGB
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             
-            # Process with MediaPipe
+            # Process with MediaPipe with error recovery
             start_time = time.time()
-            results = self.hands.process(rgb_frame)
+            try:
+                results = self.hands.process(rgb_frame)
+            except Exception as process_error:
+                # Handle MediaPipe processing errors
+                logger.error(f"Error in MediaPipe processing: {process_error}")
+                
+                # Try to recover by reinitializing MediaPipe with lower complexity
+                import platform
+                if platform.system() == "Darwin":  # macOS-specific recovery
+                    logger.info("Attempting to recover MediaPipe on macOS...")
+                    try:
+                        # Reinitialize with lower complexity
+                        self.hands = self.mp_hands.Hands(
+                            static_image_mode=False,
+                            max_num_hands=self.max_hands,
+                            model_complexity=1,  # Always use lower complexity for recovery
+                            min_detection_confidence=self.confidence_threshold,
+                            min_tracking_confidence=self.confidence_threshold
+                        )
+                        # Try processing again
+                        results = self.hands.process(rgb_frame)
+                        logger.info("MediaPipe recovery successful")
+                    except Exception as recovery_error:
+                        logger.error(f"MediaPipe recovery failed: {recovery_error}")
+                        return []
+                else:
+                    # For other platforms, just return empty results
+                    return []
+                
             processing_time = time.time() - start_time
             
             # Update statistics
@@ -1053,6 +1143,9 @@ class GestureProcessor:
     
     def _processing_loop(self):
         """Background processing thread."""
+        consecutive_errors = 0
+        max_consecutive_errors = 3
+        
         while self.is_running:
             try:
                 frame = self.processing_queue.get(timeout=0.1)
@@ -1062,11 +1155,58 @@ class GestureProcessor:
                     self.result_queue.put_nowait(detections)
                 except queue.Full:
                     logger.warning("Result queue full, dropping results")
+                
+                # Reset error counter on successful processing
+                consecutive_errors = 0
                     
             except queue.Empty:
                 continue
             except Exception as e:
                 logger.error(f"Error in processing loop: {e}")
+                consecutive_errors += 1
+                
+                # If we have too many consecutive errors, try to recover
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.warning(f"Too many consecutive errors ({consecutive_errors}), attempting recovery...")
+                    
+                    try:
+                        # Attempt to reinitialize MediaPipe
+                        import platform
+                        if platform.system() == "Darwin":  # macOS
+                            logger.info("Reinitializing MediaPipe for macOS after multiple errors")
+                            
+                            # Pre-initialize Metal context
+                            if self.enable_gpu:
+                                import cv2
+                                test_frame = np.zeros((64, 64, 3), dtype=np.uint8)
+                                gpu_mat = cv2.UMat(test_frame)
+                                _ = cv2.GaussianBlur(gpu_mat, (5, 5), 0)
+                                logger.info("Metal GPU context pre-initialized for recovery")
+                            
+                            # Reinitialize with lower complexity
+                            self.hands = self.mp_hands.Hands(
+                                static_image_mode=False,
+                                max_num_hands=self.max_hands,
+                                model_complexity=1,  # Use lower complexity for stability
+                                min_detection_confidence=self.confidence_threshold,
+                                min_tracking_confidence=self.confidence_threshold
+                            )
+                        else:
+                            # For other platforms
+                            logger.info("Reinitializing MediaPipe after multiple errors")
+                            self.hands = self.mp_hands.Hands(
+                                static_image_mode=False,
+                                max_num_hands=self.max_hands,
+                                model_complexity=1,  # Use lower complexity for recovery
+                                min_detection_confidence=self.confidence_threshold,
+                                min_tracking_confidence=self.confidence_threshold
+                            )
+                        
+                        # Reset error counter after recovery attempt
+                        consecutive_errors = 0
+                        logger.info("MediaPipe reinitialization successful")
+                    except Exception as recovery_error:
+                        logger.error(f"Failed to recover MediaPipe: {recovery_error}")
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get processing statistics."""
