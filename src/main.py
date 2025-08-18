@@ -164,7 +164,10 @@ class HandToKeyApplication:
             max_hands=settings.max_hands,
             enable_gpu=settings.enable_gpu,
             frame_skip=settings.frame_skip,
-            confidence_threshold=settings.min_detection_confidence
+            confidence_threshold=settings.min_detection_confidence,
+            temporal_smoothing=settings.enable_temporal_smoothing,
+            smoothing_window=settings.smoothing_window,
+            min_gesture_frames=settings.min_gesture_frames
         )
         
         # Start processing thread if threading enabled

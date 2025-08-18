@@ -85,6 +85,37 @@ class GestureDetectorBase(ABC):
 class StandardGestureDetector(GestureDetectorBase):
     """Standard gesture detector with enhanced detection algorithms."""
     
+    # Define gesture priority levels (higher number = higher priority)
+    GESTURE_PRIORITIES = {
+        GestureType.PINCH_INDEX: 10,
+        GestureType.PINCH_MIDDLE: 10,
+        GestureType.PINCH_RING: 10,
+        GestureType.PINCH_PINKY: 10,
+        GestureType.OK_SIGN: 9,
+        GestureType.ROCK_ON: 9,
+        GestureType.THUMBS_UP: 8,
+        GestureType.VICTORY: 7,
+        GestureType.THREE: 7,
+        GestureType.INDEX_ONLY: 7,
+        GestureType.FIST: 6,
+        GestureType.OPEN_PALM: 5,
+        # Motion gestures have lower priority by default
+        GestureType.SWIPE_LEFT: 4,
+        GestureType.SWIPE_RIGHT: 4,
+        GestureType.SWIPE_UP: 4,
+        GestureType.SWIPE_DOWN: 4,
+    }
+    
+    # Define mutually exclusive gesture groups
+    MUTUALLY_EXCLUSIVE_GROUPS = [
+        # Pinch gestures are mutually exclusive with open palm
+        {GestureType.OPEN_PALM, GestureType.PINCH_INDEX, GestureType.PINCH_MIDDLE, 
+         GestureType.PINCH_RING, GestureType.PINCH_PINKY},
+        # Basic hand shapes are mutually exclusive
+        {GestureType.OPEN_PALM, GestureType.FIST, GestureType.VICTORY, 
+         GestureType.THREE, GestureType.INDEX_ONLY, GestureType.THUMBS_UP},
+    ]
+    
     def __init__(self, sensitivity: float = 1.0, 
                  enable_motion_gestures: bool = True,
                  enable_custom_gestures: bool = False):
@@ -93,13 +124,37 @@ class StandardGestureDetector(GestureDetectorBase):
         self.enable_custom_gestures = enable_custom_gestures
         self.motion_history: List[Tuple[float, float]] = []
         self.custom_gesture_models = {}
+        # Store gesture confidence scores
+        self.gesture_confidences: Dict[GestureType, float] = {}
         
     def detect(self, landmarks: Any) -> Set[GestureType]:
         """Detect all applicable gestures from hand landmarks."""
         gestures = set()
+        self.gesture_confidences = {}
         
-        # Basic gesture detection
-        if self._is_open_palm(landmarks):
+        # Detect pinch gestures first (higher priority)
+        has_pinch = False
+        if self._is_pinch(landmarks, 8):
+            gestures.add(GestureType.PINCH_INDEX)
+            has_pinch = True
+        if self._is_pinch(landmarks, 12):
+            gestures.add(GestureType.PINCH_MIDDLE)
+            has_pinch = True
+        if self._is_pinch(landmarks, 16):
+            gestures.add(GestureType.PINCH_RING)
+            has_pinch = True
+        if self._is_pinch(landmarks, 20):
+            gestures.add(GestureType.PINCH_PINKY)
+            has_pinch = True
+            
+        # Advanced gestures
+        if self._is_ok_sign(landmarks):
+            gestures.add(GestureType.OK_SIGN)
+        if self._is_rock_on(landmarks):
+            gestures.add(GestureType.ROCK_ON)
+            
+        # Basic gesture detection - skip open palm if pinch is detected
+        if not has_pinch and self._is_open_palm(landmarks):
             gestures.add(GestureType.OPEN_PALM)
         if self._is_fist(landmarks):
             gestures.add(GestureType.FIST)
@@ -112,32 +167,43 @@ class StandardGestureDetector(GestureDetectorBase):
         if self._is_thumbs_up(landmarks):
             gestures.add(GestureType.THUMBS_UP)
             
-        # Pinch gestures
-        if self._is_pinch(landmarks, 8):
-            gestures.add(GestureType.PINCH_INDEX)
-        if self._is_pinch(landmarks, 12):
-            gestures.add(GestureType.PINCH_MIDDLE)
-        if self._is_pinch(landmarks, 16):
-            gestures.add(GestureType.PINCH_RING)
-        if self._is_pinch(landmarks, 20):
-            gestures.add(GestureType.PINCH_PINKY)
-            
-        # Advanced gestures
-        if self._is_ok_sign(landmarks):
-            gestures.add(GestureType.OK_SIGN)
-        if self._is_rock_on(landmarks):
-            gestures.add(GestureType.ROCK_ON)
-            
         # Motion gestures
         if self.enable_motion_gestures:
             motion_gesture = self._detect_motion_gesture(landmarks)
             if motion_gesture:
                 gestures.add(motion_gesture)
-                
-        return gestures
+        
+        # Apply mutual exclusion rules based on priorities
+        return self._resolve_gesture_conflicts(gestures)
+        
+    def _resolve_gesture_conflicts(self, detected_gestures: Set[GestureType]) -> Set[GestureType]:
+        """Resolve conflicts between mutually exclusive gestures based on priorities."""
+        if not detected_gestures:
+            return detected_gestures
+            
+        # Check for conflicts within each mutually exclusive group
+        for group in self.MUTUALLY_EXCLUSIVE_GROUPS:
+            intersection = group.intersection(detected_gestures)
+            if len(intersection) > 1:
+                # Find the gesture with highest priority in this group
+                highest_priority_gesture = max(
+                    intersection, 
+                    key=lambda g: self.GESTURE_PRIORITIES.get(g, 0)
+                )
+                # Remove all other gestures from this group
+                for gesture in intersection:
+                    if gesture != highest_priority_gesture:
+                        detected_gestures.remove(gesture)
+                        
+        return detected_gestures
     
     def get_confidence(self, gesture_type: GestureType, landmarks: Any) -> float:
         """Calculate confidence score for a specific gesture."""
+        # First check if we already calculated confidence during detection
+        if gesture_type in self.gesture_confidences:
+            return self.gesture_confidences[gesture_type]
+        
+        # Otherwise use specific confidence calculators
         confidence_map = {
             GestureType.OPEN_PALM: self._get_open_palm_confidence,
             GestureType.FIST: self._get_fist_confidence,
@@ -148,8 +214,13 @@ class StandardGestureDetector(GestureDetectorBase):
         
         calculator = confidence_map.get(gesture_type)
         if calculator:
-            return calculator(landmarks)
-        return 0.0
+            confidence = calculator(landmarks)
+            # Store for future reference
+            self.gesture_confidences[gesture_type] = confidence
+            return confidence
+            
+        # Default confidence for gestures without specific calculators
+        return 0.8  # Reasonable default confidence
     
     def _l2_distance(self, p1: Any, p2: Any) -> float:
         """Calculate L2 distance between two landmarks."""
@@ -176,13 +247,47 @@ class StandardGestureDetector(GestureDetectorBase):
         return self._finger_extended(landmarks, 4, 3, 0)
     
     def _is_open_palm(self, landmarks: List[Any]) -> bool:
-        """Detect open palm gesture."""
-        return all([
+        """
+        Detect open palm gesture.
+        
+        An open palm is detected when all five fingers (including thumb) are extended
+        and there are no active pinch gestures.
+        """
+        # Check if all fingers are extended
+        all_fingers_extended = all([
+            self._thumb_extended(landmarks),          # Thumb
             self._finger_extended(landmarks, 8, 6),   # Index
             self._finger_extended(landmarks, 12, 10), # Middle
             self._finger_extended(landmarks, 16, 14), # Ring
             self._finger_extended(landmarks, 20, 18)  # Pinky
         ])
+        
+        # Check that no pinch gestures are active
+        no_pinch_active = not any([
+            self._is_pinch(landmarks, 8),  # Index pinch
+            self._is_pinch(landmarks, 12), # Middle pinch
+            self._is_pinch(landmarks, 16), # Ring pinch
+            self._is_pinch(landmarks, 20)  # Pinky pinch
+        ])
+        
+        # Calculate confidence score for open palm
+        confidence = 0.0
+        if all_fingers_extended:
+            # Base confidence from finger extension
+            confidence = 0.7
+            
+            # Increase confidence if fingers are well-separated
+            if self._fingers_are_spread(landmarks):
+                confidence += 0.2
+                
+            # Decrease confidence if any finger is close to thumb
+            if not no_pinch_active:
+                confidence -= 0.3
+                
+        # Store confidence score for later use
+        self.gesture_confidences[GestureType.OPEN_PALM] = confidence
+        
+        return all_fingers_extended and no_pinch_active
     
     def _is_fist(self, landmarks: List[Any]) -> bool:
         """Detect fist gesture."""
@@ -224,11 +329,46 @@ class StandardGestureDetector(GestureDetectorBase):
                 not self._finger_extended(landmarks, 16, 14) and
                 not self._finger_extended(landmarks, 20, 18))
     
+    def _fingers_are_spread(self, landmarks: List[Any]) -> bool:
+        """Check if fingers are well-separated from each other."""
+        # Get fingertip positions
+        fingertips = [landmarks[8], landmarks[12], landmarks[16], landmarks[20]]
+        
+        # Calculate minimum distance between any two fingertips
+        min_distance = float('inf')
+        for i in range(len(fingertips)):
+            for j in range(i+1, len(fingertips)):
+                dist = self._l2_distance(fingertips[i], fingertips[j])
+                min_distance = min(min_distance, dist)
+        
+        # Normalize by hand size
+        diag = self._bbox_diag(landmarks) + 1e-6
+        spread_ratio = min_distance / diag
+        
+        # Fingers are considered spread if the minimum distance between
+        # any two fingertips is at least 10% of the hand's bounding box diagonal
+        return spread_ratio > 0.1
+    
     def _is_pinch(self, landmarks: List[Any], tip_idx: int) -> bool:
         """Detect pinch gesture with specific finger."""
         ratio = 0.08 * self.sensitivity
         d = self._l2_distance(landmarks[4], landmarks[tip_idx])
         diag = self._bbox_diag(landmarks) + 1e-6
+        
+        # Calculate confidence based on distance
+        pinch_ratio = d / (ratio * diag)
+        confidence = max(0.0, 1.0 - pinch_ratio)
+        
+        # Store confidence score for this pinch gesture
+        if tip_idx == 8:
+            self.gesture_confidences[GestureType.PINCH_INDEX] = confidence
+        elif tip_idx == 12:
+            self.gesture_confidences[GestureType.PINCH_MIDDLE] = confidence
+        elif tip_idx == 16:
+            self.gesture_confidences[GestureType.PINCH_RING] = confidence
+        elif tip_idx == 20:
+            self.gesture_confidences[GestureType.PINCH_PINKY] = confidence
+        
         return d < ratio * diag
     
     def _is_ok_sign(self, landmarks: List[Any]) -> bool:
@@ -418,7 +558,10 @@ class GestureProcessor:
                  max_hands: int = 2,
                  enable_gpu: bool = True,
                  frame_skip: int = 0,
-                 confidence_threshold: float = 0.6):
+                 confidence_threshold: float = 0.6,
+                 temporal_smoothing: bool = True,
+                 smoothing_window: int = 3,
+                 min_gesture_frames: int = 2):
         
         self.detector = detector
         self.enable_multi_hand = enable_multi_hand
@@ -426,6 +569,9 @@ class GestureProcessor:
         self.enable_gpu = enable_gpu
         self.frame_skip = frame_skip
         self.confidence_threshold = confidence_threshold
+        self.temporal_smoothing = temporal_smoothing
+        self.smoothing_window = smoothing_window
+        self.min_gesture_frames = min_gesture_frames
         
         # MediaPipe setup
         self.mp_hands = mp.solutions.hands
@@ -436,6 +582,11 @@ class GestureProcessor:
         self.hand_trackings: Dict[int, HandTracking] = {}
         self.frame_counter = 0
         self.processing_time_avg = 0.0
+        
+        # Gesture history for temporal filtering
+        self.gesture_history: Dict[int, List[Set[GestureType]]] = {}
+        self.last_reported_gestures: Dict[int, Set[GestureType]] = {}
+        self.gesture_stability_count: Dict[Tuple[int, GestureType], int] = {}
         
         # Threading
         self.processing_queue = queue.Queue(maxsize=30)
@@ -448,7 +599,8 @@ class GestureProcessor:
             'frames_processed': 0,
             'gestures_detected': 0,
             'avg_confidence': 0.0,
-            'avg_processing_time': 0.0
+            'avg_processing_time': 0.0,
+            'gesture_stability': 0.0
         }
         
         # Initialize MediaPipe Hands
@@ -498,12 +650,19 @@ class GestureProcessor:
             0.9 * self.stats['avg_processing_time'] + 0.1 * processing_time
         )
         
-        detections = []
+        # Raw detections before temporal filtering
+        raw_detections = []
+        
+        # Map to store detected gestures by hand index
+        current_gestures_by_hand: Dict[int, Set[GestureType]] = {}
         
         if results.multi_hand_landmarks:
             for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
                 # Detect gestures
                 gesture_types = self.detector.detect(hand_landmarks.landmark)
+                
+                # Store current gestures for this hand
+                current_gestures_by_hand[hand_idx] = gesture_types
                 
                 # Create detection objects with confidence scores
                 for gesture_type in gesture_types:
@@ -537,7 +696,7 @@ class GestureProcessor:
                             velocity=velocity
                         )
                         
-                        detections.append(detection)
+                        raw_detections.append(detection)
                         
                         # Update tracking
                         if hand_idx not in self.hand_trackings:
@@ -561,7 +720,86 @@ class GestureProcessor:
                             0.9 * self.stats['avg_confidence'] + 0.1 * confidence
                         )
         
-        return detections
+        # Apply temporal filtering if enabled
+        if self.temporal_smoothing:
+            filtered_detections = self._apply_temporal_filtering(raw_detections, current_gestures_by_hand)
+            return filtered_detections
+        else:
+            return raw_detections
+            
+    def _apply_temporal_filtering(self, 
+                                 raw_detections: List[GestureDetection],
+                                 current_gestures_by_hand: Dict[int, Set[GestureType]]) -> List[GestureDetection]:
+        """Apply temporal filtering to stabilize gesture detection."""
+        filtered_detections = []
+        
+        # Update gesture history for each hand
+        for hand_idx, gestures in current_gestures_by_hand.items():
+            # Initialize history for new hands
+            if hand_idx not in self.gesture_history:
+                self.gesture_history[hand_idx] = []
+                self.last_reported_gestures[hand_idx] = set()
+            
+            # Add current gestures to history
+            self.gesture_history[hand_idx].append(gestures)
+            
+            # Keep history limited to window size
+            if len(self.gesture_history[hand_idx]) > self.smoothing_window:
+                self.gesture_history[hand_idx].pop(0)
+            
+            # Update stability counts for each gesture
+            for gesture in gestures:
+                key = (hand_idx, gesture)
+                if key not in self.gesture_stability_count:
+                    self.gesture_stability_count[key] = 0
+                self.gesture_stability_count[key] += 1
+            
+            # Decrease counts for gestures not in current frame
+            for key in list(self.gesture_stability_count.keys()):
+                h_idx, gesture = key
+                if h_idx == hand_idx and gesture not in gestures:
+                    self.gesture_stability_count[key] = max(0, self.gesture_stability_count[key] - 1)
+                    # Remove if count reaches zero
+                    if self.gesture_stability_count[key] == 0:
+                        del self.gesture_stability_count[key]
+        
+        # Determine stable gestures
+        stable_gestures: Dict[int, Set[GestureType]] = {}
+        for hand_idx in current_gestures_by_hand.keys():
+            stable_gestures[hand_idx] = set()
+            
+            # Check each gesture's stability
+            for key, count in self.gesture_stability_count.items():
+                h_idx, gesture = key
+                if h_idx == hand_idx and count >= self.min_gesture_frames:
+                    stable_gestures[hand_idx].add(gesture)
+        
+        # Filter raw detections based on stable gestures
+        for detection in raw_detections:
+            hand_idx = detection.hand_index
+            gesture = detection.gesture_type
+            
+            if hand_idx in stable_gestures and gesture in stable_gestures[hand_idx]:
+                filtered_detections.append(detection)
+                
+                # Update last reported gestures
+                if hand_idx in self.last_reported_gestures:
+                    self.last_reported_gestures[hand_idx].add(gesture)
+        
+        # Calculate stability metric
+        total_stability = 0
+        total_gestures = 0
+        for hand_idx, gestures in stable_gestures.items():
+            for gesture in gestures:
+                key = (hand_idx, gesture)
+                if key in self.gesture_stability_count:
+                    total_stability += min(1.0, self.gesture_stability_count[key] / self.smoothing_window)
+                    total_gestures += 1
+        
+        if total_gestures > 0:
+            self.stats['gesture_stability'] = total_stability / total_gestures
+        
+        return filtered_detections
     
     def process_frame_async(self, frame: np.ndarray):
         """Queue frame for asynchronous processing."""

@@ -71,6 +71,11 @@ class ApplicationSettings:
     enable_multi_hand: bool = False
     max_hands: int = 2
     
+    # Gesture filtering settings
+    enable_temporal_smoothing: bool = True
+    smoothing_window: int = 3
+    min_gesture_frames: int = 2
+    
     # Performance settings
     enable_gpu: bool = True
     frame_skip: int = 0
@@ -157,6 +162,9 @@ class ConfigSchema:
             "gesture_sensitivity": {"type": "number", "minimum": 0.1, "maximum": 3.0},
             "enable_multi_hand": {"type": "boolean"},
             "max_hands": {"type": "integer", "minimum": 1, "maximum": 4},
+            "enable_temporal_smoothing": {"type": "boolean"},
+            "smoothing_window": {"type": "integer", "minimum": 1, "maximum": 10},
+            "min_gesture_frames": {"type": "integer", "minimum": 1, "maximum": 10},
             "enable_gpu": {"type": "boolean"},
             "frame_skip": {"type": "integer", "minimum": 0},
             "processing_threads": {"type": "integer", "minimum": 1},
