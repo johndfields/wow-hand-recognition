@@ -172,7 +172,7 @@ def run_modular_mode(args):
     Args:
         args: Command line arguments
     """
-    from gestures.detector import StandardGestureDetector
+    from gestures.detector import StandardGestureDetector, GestureProcessor
     from input.handler import UnifiedInputHandler
     from config.manager import ConfigurationManager
     from camera.capture import CameraCapture
@@ -256,10 +256,18 @@ def run_modular_mode(args):
     
     # Initialize gesture detector
     detector = StandardGestureDetector(
-        min_detection_confidence=settings.min_detection_confidence,
-        min_tracking_confidence=settings.min_tracking_confidence,
+        sensitivity=settings.gesture_sensitivity,
+        enable_motion_gestures=True,
+        enable_custom_gestures=False
+    )
+    
+    # Initialize gesture processor
+    processor = GestureProcessor(
+        detector=detector,
         enable_multi_hand=settings.enable_multi_hand,
-        max_hands=settings.max_hands
+        max_hands=settings.max_hands,
+        enable_gpu=settings.enable_gpu,
+        confidence_threshold=settings.min_detection_confidence
     )
     
     # Initialize input handler
@@ -322,33 +330,28 @@ def run_modular_mode(args):
                 time.sleep(0.1)
                 continue
             
-            # Process frame with gesture detector
-            results = detector.process(frame)
+            # Process frame with gesture processor
+            detections = processor.process_frame(frame)
             
             # Handle detected gestures
-            if results.multi_hand_landmarks:
-                for hand_landmarks in results.multi_hand_landmarks:
-                    # Detect gestures
-                    gestures = detector.detect(hand_landmarks.landmark)
-                    
-                    # Execute mapped actions if cooldown has passed
-                    current_time = time.time()
-                    if current_time - last_detection_time > cooldown and gestures:
-                        for gesture in gestures:
-                            gesture_name = gesture.name.lower()
-                            if input_handler.execute_gesture(gesture_name):
-                                last_detection_time = current_time
-                                logger.info(f"Executed gesture: {gesture_name}")
-                                break
+            if detections:
+                # Execute mapped actions if cooldown has passed
+                current_time = time.time()
+                if current_time - last_detection_time > cooldown:
+                    for detection in detections:
+                        gesture_name = detection.gesture_type.value
+                        if input_handler.execute_gesture(gesture_name):
+                            last_detection_time = current_time
+                            logger.info(f"Executed gesture: {gesture_name} with confidence {detection.confidence:.2f}")
+                            break
             
             # Update preview if enabled
             if preview:
-                # Draw landmarks on frame
-                if results.multi_hand_landmarks:
-                    for hand_landmarks in results.multi_hand_landmarks:
-                        detector.draw_landmarks(frame, hand_landmarks)
+                # Draw landmarks and debug info on frame
+                if settings.show_debug_info:
+                    frame = processor.draw_debug_info(frame, detections)
                 
-                # Add debug info if enabled
+                # Add additional debug info
                 if settings.show_debug_info:
                     # Add FPS, active profile, etc.
                     fps = camera.get_fps()
