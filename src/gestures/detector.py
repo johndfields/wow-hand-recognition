@@ -689,14 +689,20 @@ class GestureProcessor:
             'gesture_stability': 0.0
         }
         
-        # Initialize MediaPipe Hands
-        self.hands = self.mp_hands.Hands(
-            static_image_mode=False,
-            max_num_hands=self.max_hands,
-            model_complexity=1 if not enable_gpu else 2,
-            min_detection_confidence=confidence_threshold,
-            min_tracking_confidence=confidence_threshold
-        )
+        # Initialize MediaPipe Hands with error handling
+        try:
+            self.hands = self.mp_hands.Hands(
+                static_image_mode=False,
+                max_num_hands=self.max_hands,
+                model_complexity=1 if not enable_gpu else 2,
+                min_detection_confidence=confidence_threshold,
+                min_tracking_confidence=confidence_threshold
+            )
+            self.mediapipe_initialized = True
+        except Exception as e:
+            logger.error(f"Error initializing MediaPipe Hands: {e}")
+            logger.warning("Falling back to basic gesture detection without MediaPipe")
+            self.mediapipe_initialized = False
     
     def start(self):
         """Start the processing thread."""
@@ -722,89 +728,99 @@ class GestureProcessor:
         if self.frame_skip > 0 and self.frame_counter % (self.frame_skip + 1) != 0:
             return []
         
-        # Convert to RGB
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Process with MediaPipe
-        start_time = time.time()
-        results = self.hands.process(rgb_frame)
-        processing_time = time.time() - start_time
-        
-        # Update statistics
-        self.stats['frames_processed'] += 1
-        self.stats['avg_processing_time'] = (
-            0.9 * self.stats['avg_processing_time'] + 0.1 * processing_time
-        )
-        
         # Raw detections before temporal filtering
         raw_detections = []
         
         # Map to store detected gestures by hand index
         current_gestures_by_hand: Dict[int, Set[GestureType]] = {}
         
-        if results.multi_hand_landmarks:
-            for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
-                # Detect gestures
-                gesture_types = self.detector.detect(hand_landmarks.landmark)
-                
-                # Store current gestures for this hand
-                current_gestures_by_hand[hand_idx] = gesture_types
-                
-                # Create detection objects with confidence scores
-                for gesture_type in gesture_types:
-                    confidence = self.detector.get_confidence(gesture_type, hand_landmarks.landmark)
+        # Check if MediaPipe is initialized
+        if not hasattr(self, 'mediapipe_initialized') or not self.mediapipe_initialized:
+            logger.warning("MediaPipe not initialized, returning empty detections")
+            return []
+        
+        try:
+            # Convert to RGB
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            # Process with MediaPipe
+            start_time = time.time()
+            results = self.hands.process(rgb_frame)
+            processing_time = time.time() - start_time
+            
+            # Update statistics
+            self.stats['frames_processed'] += 1
+            self.stats['avg_processing_time'] = (
+                0.9 * self.stats['avg_processing_time'] + 0.1 * processing_time
+            )
+            
+            if results.multi_hand_landmarks:
+                for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
+                    # Detect gestures
+                    gesture_types = self.detector.detect(hand_landmarks.landmark)
                     
-                    if confidence >= self.confidence_threshold:
-                        # Calculate hand position
-                        palm_center = hand_landmarks.landmark[9]
-                        position = (palm_center.x, palm_center.y)
+                    # Store current gestures for this hand
+                    current_gestures_by_hand[hand_idx] = gesture_types
+                    
+                    # Create detection objects with confidence scores
+                    for gesture_type in gesture_types:
+                        confidence = self.detector.get_confidence(gesture_type, hand_landmarks.landmark)
                         
-                        # Calculate velocity if tracking exists
-                        velocity = (0.0, 0.0)
-                        if hand_idx in self.hand_trackings:
+                        if confidence >= self.confidence_threshold:
+                            # Calculate hand position
+                            palm_center = hand_landmarks.landmark[9]
+                            position = (palm_center.x, palm_center.y)
+                            
+                            # Calculate velocity if tracking exists
+                            velocity = (0.0, 0.0)
+                            if hand_idx in self.hand_trackings:
+                                tracking = self.hand_trackings[hand_idx]
+                                if tracking.positions:
+                                    last_pos = tracking.positions[-1]
+                                    dt = time.time() - tracking.last_update
+                                    if dt > 0:
+                                        velocity = (
+                                            (position[0] - last_pos[0]) / dt,
+                                            (position[1] - last_pos[1]) / dt
+                                        )
+                            
+                            detection = GestureDetection(
+                                gesture_type=gesture_type,
+                                confidence=confidence,
+                                timestamp=time.time(),
+                                hand_index=hand_idx,
+                                landmarks=hand_landmarks,
+                                position=position,
+                                velocity=velocity
+                            )
+                            
+                            raw_detections.append(detection)
+                            
+                            # Update tracking
+                            if hand_idx not in self.hand_trackings:
+                                self.hand_trackings[hand_idx] = HandTracking(hand_id=hand_idx)
+                            
                             tracking = self.hand_trackings[hand_idx]
-                            if tracking.positions:
-                                last_pos = tracking.positions[-1]
-                                dt = time.time() - tracking.last_update
-                                if dt > 0:
-                                    velocity = (
-                                        (position[0] - last_pos[0]) / dt,
-                                        (position[1] - last_pos[1]) / dt
-                                    )
-                        
-                        detection = GestureDetection(
-                            gesture_type=gesture_type,
-                            confidence=confidence,
-                            timestamp=time.time(),
-                            hand_index=hand_idx,
-                            landmarks=hand_landmarks,
-                            position=position,
-                            velocity=velocity
-                        )
-                        
-                        raw_detections.append(detection)
-                        
-                        # Update tracking
-                        if hand_idx not in self.hand_trackings:
-                            self.hand_trackings[hand_idx] = HandTracking(hand_id=hand_idx)
-                        
-                        tracking = self.hand_trackings[hand_idx]
-                        tracking.positions.append(position)
-                        tracking.gestures.append(detection)
-                        tracking.last_update = time.time()
-                        tracking.velocity = velocity
-                        
-                        # Keep tracking history limited
-                        if len(tracking.positions) > 100:
-                            tracking.positions.pop(0)
-                        if len(tracking.gestures) > 100:
-                            tracking.gestures.pop(0)
-                        
-                        # Update statistics
-                        self.stats['gestures_detected'] += 1
-                        self.stats['avg_confidence'] = (
-                            0.9 * self.stats['avg_confidence'] + 0.1 * confidence
-                        )
+                            tracking.positions.append(position)
+                            tracking.gestures.append(detection)
+                            tracking.last_update = time.time()
+                            tracking.velocity = velocity
+                            
+                            # Keep tracking history limited
+                            if len(tracking.positions) > 100:
+                                tracking.positions.pop(0)
+                            if len(tracking.gestures) > 100:
+                                tracking.gestures.pop(0)
+                            
+                            # Update statistics
+                            self.stats['gestures_detected'] += 1
+                            self.stats['avg_confidence'] = (
+                                0.9 * self.stats['avg_confidence'] + 0.1 * confidence
+                            )
+        except Exception as e:
+            logger.error(f"Error processing frame with MediaPipe: {e}")
+            logger.warning("Returning empty detections due to processing error")
+            return []
         
         # Apply temporal filtering if enabled
         if self.temporal_smoothing:
@@ -855,7 +871,19 @@ class GestureProcessor:
                         break
                 
                 # Adjust stability increment based on confidence and priority
-                priority = self.detector.GESTURE_PRIORITIES.get(gesture, 0)
+                # Check if detector has GESTURE_PRIORITIES attribute
+                if hasattr(self.detector, 'GESTURE_PRIORITIES'):
+                    priority = self.detector.GESTURE_PRIORITIES.get(gesture, 0)
+                else:
+                    # Fallback priorities for basic gestures
+                    priority_map = {
+                        GestureType.PINCH_INDEX: 10,
+                        GestureType.PINCH_MIDDLE: 10,
+                        GestureType.PINCH_RING: 10,
+                        GestureType.PINCH_PINKY: 10,
+                        GestureType.OPEN_PALM: 5,
+                    }
+                    priority = priority_map.get(gesture, 0)
                 
                 # Higher confidence and priority gestures gain stability faster
                 increment = 1.0
@@ -871,7 +899,20 @@ class GestureProcessor:
                 h_idx, gesture = key
                 if h_idx == hand_idx and gesture not in gestures:
                     # Higher priority gestures decay slower
-                    priority = self.detector.GESTURE_PRIORITIES.get(gesture, 0)
+                    # Check if detector has GESTURE_PRIORITIES attribute
+                    if hasattr(self.detector, 'GESTURE_PRIORITIES'):
+                        priority = self.detector.GESTURE_PRIORITIES.get(gesture, 0)
+                    else:
+                        # Fallback priorities for basic gestures
+                        priority_map = {
+                            GestureType.PINCH_INDEX: 10,
+                            GestureType.PINCH_MIDDLE: 10,
+                            GestureType.PINCH_RING: 10,
+                            GestureType.PINCH_PINKY: 10,
+                            GestureType.OPEN_PALM: 5,
+                        }
+                        priority = priority_map.get(gesture, 0)
+                    
                     decay_rate = 1.0
                     if priority >= 10:  # High priority (pinch gestures)
                         decay_rate = 0.7  # Slower decay for high priority gestures
@@ -893,7 +934,19 @@ class GestureProcessor:
                 h_idx, gesture = key
                 if h_idx == hand_idx:
                     # Adjust stability threshold based on priority
-                    priority = self.detector.GESTURE_PRIORITIES.get(gesture, 0)
+                    # Check if detector has GESTURE_PRIORITIES attribute
+                    if hasattr(self.detector, 'GESTURE_PRIORITIES'):
+                        priority = self.detector.GESTURE_PRIORITIES.get(gesture, 0)
+                    else:
+                        # Fallback priorities for basic gestures
+                        priority_map = {
+                            GestureType.PINCH_INDEX: 10,
+                            GestureType.PINCH_MIDDLE: 10,
+                            GestureType.PINCH_RING: 10,
+                            GestureType.PINCH_PINKY: 10,
+                            GestureType.OPEN_PALM: 5,
+                        }
+                        priority = priority_map.get(gesture, 0)
                     
                     # Higher priority gestures need fewer frames to be considered stable
                     threshold_adjustment = 0
@@ -907,7 +960,22 @@ class GestureProcessor:
             
             # Resolve conflicts between stable gestures using detector's conflict resolution
             if potential_stable_gestures:
-                stable_gestures[hand_idx] = self.detector._resolve_gesture_conflicts(set(potential_stable_gestures))
+                # Check if detector has _resolve_gesture_conflicts method
+                if hasattr(self.detector, '_resolve_gesture_conflicts'):
+                    stable_gestures[hand_idx] = self.detector._resolve_gesture_conflicts(set(potential_stable_gestures))
+                else:
+                    # Fallback to simple priority-based resolution
+                    potential_set = set(potential_stable_gestures)
+                    
+                    # Check for pinch vs open palm conflict
+                    has_pinch = any(g in {GestureType.PINCH_INDEX, GestureType.PINCH_MIDDLE, 
+                                         GestureType.PINCH_RING, GestureType.PINCH_PINKY} 
+                                    for g in potential_set)
+                    
+                    if has_pinch and GestureType.OPEN_PALM in potential_set:
+                        potential_set.remove(GestureType.OPEN_PALM)
+                    
+                    stable_gestures[hand_idx] = potential_set
         
         # Filter raw detections based on stable gestures
         for detection in raw_detections:
