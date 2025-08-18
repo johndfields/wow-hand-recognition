@@ -41,4 +41,12 @@ echo "Starting in 3 seconds..."
 sleep 3
 
 # Run the application with the unified implementation using uv
-uv run --python .venv/bin/python src/main.py --config gaming_config.json --mode modular --debug
+# First, migrate the gaming_config.json to the modular format if needed
+mkdir -p config/profiles
+if [ ! -f config/profiles/gaming.json ]; then
+    echo "Migrating gaming configuration to modular format..."
+    uv run --python .venv/bin/python migrate_gaming_config.py
+fi
+
+# Run the application with the modular implementation
+uv run --python .venv/bin/python src/main.py --mode modular --profile Gaming --debug
