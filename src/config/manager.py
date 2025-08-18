@@ -340,6 +340,24 @@ class ConfigurationManager:
         except Exception as e:
             logger.error(f"Error loading settings {file_path}: {e}")
     
+    def update_settings(self, settings_dict: Dict[str, Any]):
+        """Update application settings with provided values."""
+        try:
+            # Update settings attributes
+            for key, value in settings_dict.items():
+                if hasattr(self.settings, key):
+                    setattr(self.settings, key, value)
+                else:
+                    logger.warning(f"Unknown setting: {key}")
+            
+            # Save updated settings
+            self.save_settings()
+            logger.info(f"Updated settings with {len(settings_dict)} values")
+            return True
+        except Exception as e:
+            logger.error(f"Error updating settings: {e}")
+            return False
+    
     def save_settings(self):
         """Save application settings to file."""
         settings_file = self.config_dir / "settings.json"

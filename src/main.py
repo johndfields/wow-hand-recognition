@@ -201,7 +201,18 @@ def run_modular_mode(args):
     
     # Load configuration if provided
     if args.config:
-        config_manager.load_config(args.config)
+        try:
+            # Try to load as a profile first
+            if os.path.exists(args.config):
+                logger.info(f"Loading configuration from {args.config}")
+                from config.migration import ConfigMigration
+                success, message = ConfigMigration.migrate_simple_to_modular(
+                    args.config,
+                    config_manager
+                )
+                logger.info(message)
+        except Exception as e:
+            logger.error(f"Error loading configuration: {e}")
     
     # Activate profile if specified
     if args.profile:
@@ -406,4 +417,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

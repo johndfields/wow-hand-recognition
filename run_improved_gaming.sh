@@ -45,7 +45,7 @@ sleep 3
 mkdir -p config/profiles
 if [ ! -f config/profiles/gaming.json ]; then
     echo "Migrating gaming configuration to modular format..."
-    uv run --python .venv/bin/python migrate_gaming_config.py
+    uv run --python .venv/bin/python migrate_config.py gaming_config.json
 fi
 
 # Run the application with the modular implementation
