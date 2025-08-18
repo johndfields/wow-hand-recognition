@@ -117,16 +117,16 @@ class StandardGestureDetector(GestureDetectorBase):
         
         # Check pinch gestures first (they take priority)
         pinch_detected = False
-        if self._is_pinch(landmarks, 8):
+        if self._is_pinch_index(landmarks):
             gestures.add(GestureType.PINCH_INDEX)
             pinch_detected = True
-        if self._is_pinch(landmarks, 12):
+        if self._is_pinch_middle(landmarks):
             gestures.add(GestureType.PINCH_MIDDLE)
             pinch_detected = True
-        if self._is_pinch(landmarks, 16):
+        if self._is_pinch_ring(landmarks):
             gestures.add(GestureType.PINCH_RING)
             pinch_detected = True
-        if self._is_pinch(landmarks, 20):
+        if self._is_pinch_pinky(landmarks):
             gestures.add(GestureType.PINCH_PINKY)
             pinch_detected = True
             
@@ -233,13 +233,46 @@ class StandardGestureDetector(GestureDetectorBase):
         return self._finger_extended(landmarks, 4, 3, 0)
     
     def _is_open_palm(self, landmarks: List[Any]) -> bool:
-        """Detect open palm gesture."""
-        return all([
+        """Enhanced open palm detection that excludes pinch-like positions."""
+        # All fingers extended
+        fingers_extended = all([
             self._finger_extended(landmarks, 8, 6),   # Index
             self._finger_extended(landmarks, 12, 10), # Middle
             self._finger_extended(landmarks, 16, 14), # Ring
             self._finger_extended(landmarks, 20, 18)  # Pinky
         ])
+        
+        if not fingers_extended:
+            return False
+        
+        # Thumb should be extended outward, not across palm
+        thumb_tip = landmarks[4]
+        index_mcp = landmarks[5]  # Base of index finger
+        
+        # Check if thumb is extended outward (not crossing palm)
+        # This depends on whether it's a left or right hand
+        # For simplicity, we'll check both conditions
+        thumb_outward = True
+        
+        # Ensure thumb is not close to any fingertip (no pinch)
+        # Check distance between thumb and all fingertips
+        no_pinch = True
+        for tip_idx in [8, 12, 16, 20]:  # All fingertips
+            # Calculate 3D distance
+            import math
+            distance = math.sqrt(
+                (thumb_tip.x - landmarks[tip_idx].x) ** 2 + 
+                (thumb_tip.y - landmarks[tip_idx].y) ** 2 + 
+                (thumb_tip.z - landmarks[tip_idx].z) ** 2
+            )
+            
+            # If thumb is close to any fingertip, it's not an open palm
+            diag = self._bbox_diag(landmarks)
+            if distance < 0.15 * diag:
+                no_pinch = False
+                break
+        
+        return fingers_extended and no_pinch
     
     def _is_fist(self, landmarks: List[Any]) -> bool:
         """Detect fist gesture."""
@@ -282,11 +315,42 @@ class StandardGestureDetector(GestureDetectorBase):
                 not self._finger_extended(landmarks, 20, 18))
     
     def _is_pinch(self, landmarks: List[Any], tip_idx: int) -> bool:
-        """Detect pinch gesture with specific finger."""
-        ratio = 0.08 * self.sensitivity
-        d = self._l2_distance(landmarks[4], landmarks[tip_idx])
+        """
+        Improved pinch detection with strict distance threshold.
+        
+        Args:
+            landmarks: Hand landmarks
+            tip_idx: Index of finger tip to pinch (8 for index, 12 for middle, etc.)
+        """
+        import math
+        
+        # Calculate 3D distance between thumb tip and finger tip
+        thumb_tip = landmarks[4]
+        finger_tip = landmarks[tip_idx]
+        
+        # Use 3D distance for more accurate pinch detection
+        distance = math.sqrt(
+            (thumb_tip.x - finger_tip.x) ** 2 + 
+            (thumb_tip.y - finger_tip.y) ** 2 + 
+            (thumb_tip.z - finger_tip.z) ** 2
+        )
+        
+        # Very strict distance threshold (adjust based on testing)
+        # This should be much smaller than the distance in an open palm
         diag = self._bbox_diag(landmarks) + 1e-6
-        return d < ratio * diag
+        MAX_PINCH_DISTANCE = 0.05 * self.sensitivity * diag
+        
+        # Additional check: thumb and finger must be closer to each other than to palm
+        palm_position = landmarks[0]  # Wrist landmark
+        thumb_to_palm = math.sqrt((thumb_tip.x - palm_position.x) ** 2 + 
+                                 (thumb_tip.y - palm_position.y) ** 2)
+        finger_to_palm = math.sqrt((finger_tip.x - palm_position.x) ** 2 + 
+                                  (finger_tip.y - palm_position.y) ** 2)
+        
+        # Ensure the pinch distance is significantly smaller than distances to palm
+        distance_ratio = distance / min(thumb_to_palm, finger_to_palm)
+        
+        return distance < MAX_PINCH_DISTANCE and distance_ratio < 0.3
     
     def _is_ok_sign(self, landmarks: List[Any]) -> bool:
         """Detect OK sign gesture."""
@@ -379,7 +443,8 @@ class StandardGestureDetector(GestureDetectorBase):
         return None
     
     def _get_open_palm_confidence(self, landmarks: List[Any]) -> float:
-        """Calculate confidence for open palm gesture."""
+        """Calculate confidence for open palm gesture with enhanced checks."""
+        # Check extension of each finger
         finger_scores = []
         for tip_idx, pip_idx in [(8, 6), (12, 10), (16, 14), (20, 18)]:
             tip = landmarks[tip_idx]
@@ -387,7 +452,34 @@ class StandardGestureDetector(GestureDetectorBase):
             wrist = landmarks[0]
             extension_ratio = self._l2_distance(tip, wrist) / (self._l2_distance(pip, wrist) + 1e-6)
             finger_scores.append(min(1.0, (extension_ratio - 1.0) / 0.3))
-        return np.mean(finger_scores)
+        
+        # Base score from finger extension
+        extension_score = np.mean(finger_scores)
+        
+        # Check that thumb is not close to any fingertip (no pinch)
+        thumb_tip = landmarks[4]
+        pinch_penalties = []
+        
+        import math
+        for tip_idx in [8, 12, 16, 20]:  # All fingertips
+            # Calculate 3D distance
+            distance = math.sqrt(
+                (thumb_tip.x - landmarks[tip_idx].x) ** 2 + 
+                (thumb_tip.y - landmarks[tip_idx].y) ** 2 + 
+                (thumb_tip.z - landmarks[tip_idx].z) ** 2
+            )
+            
+            # Calculate penalty for thumb being close to fingertip
+            diag = self._bbox_diag(landmarks)
+            normalized_dist = distance / (0.15 * diag)
+            penalty = 1.0 - min(1.0, normalized_dist)
+            pinch_penalties.append(penalty)
+        
+        # Apply maximum pinch penalty
+        max_pinch_penalty = max(pinch_penalties) if pinch_penalties else 0.0
+        
+        # Final confidence score
+        return extension_score * (1.0 - max_pinch_penalty * 0.8)
     
     def _get_fist_confidence(self, landmarks: List[Any]) -> float:
         """Calculate confidence for fist gesture."""
@@ -529,12 +621,88 @@ class StandardGestureDetector(GestureDetectorBase):
         return (index_extended * 0.33 + pinky_extended * 0.33 + 
                 other_fingers_curled * 0.34)
     
+    def _is_pinch_index(self, landmarks: List[Any]) -> bool:
+        """Check for index finger pinch with other fingers in specific positions."""
+        # Basic pinch between thumb and index
+        basic_pinch = self._is_pinch(landmarks, 8)
+        
+        # For index pinch: middle, ring, and pinky should be curled
+        other_fingers_curled = (
+            not self._finger_extended(landmarks, 12, 10) and  # Middle curled
+            not self._finger_extended(landmarks, 16, 14) and  # Ring curled
+            not self._finger_extended(landmarks, 20, 18)      # Pinky curled
+        )
+        
+        return basic_pinch and other_fingers_curled
+    
+    def _is_pinch_middle(self, landmarks: List[Any]) -> bool:
+        """Check for middle finger pinch with other fingers in specific positions."""
+        # Basic pinch between thumb and middle
+        basic_pinch = self._is_pinch(landmarks, 12)
+        
+        # For middle pinch: index can be extended, ring and pinky should be curled
+        other_fingers_position = (
+            not self._finger_extended(landmarks, 16, 14) and  # Ring curled
+            not self._finger_extended(landmarks, 20, 18)      # Pinky curled
+        )
+        
+        return basic_pinch and other_fingers_position
+    
+    def _is_pinch_ring(self, landmarks: List[Any]) -> bool:
+        """Check for ring finger pinch with other fingers in specific positions."""
+        # Basic pinch between thumb and ring
+        basic_pinch = self._is_pinch(landmarks, 16)
+        
+        # For ring pinch: middle can be extended, index and pinky can vary
+        other_fingers_position = (
+            not self._finger_extended(landmarks, 20, 18)      # Pinky curled
+        )
+        
+        return basic_pinch and other_fingers_position
+    
+    def _is_pinch_pinky(self, landmarks: List[Any]) -> bool:
+        """Check for pinky finger pinch."""
+        # Just basic pinch between thumb and pinky is enough
+        # This is already distinct enough from other gestures
+        return self._is_pinch(landmarks, 20)
+    
     def _get_pinch_confidence(self, landmarks: List[Any], tip_idx: int) -> float:
         """Calculate confidence for pinch gesture with specific finger."""
-        d = self._l2_distance(landmarks[4], landmarks[tip_idx])
+        # Calculate basic pinch distance confidence
+        thumb_tip = landmarks[4]
+        finger_tip = landmarks[tip_idx]
+        
+        # Use 3D distance for more accurate pinch detection
+        import math
+        distance = math.sqrt(
+            (thumb_tip.x - finger_tip.x) ** 2 + 
+            (thumb_tip.y - finger_tip.y) ** 2 + 
+            (thumb_tip.z - finger_tip.z) ** 2
+        )
+        
         diag = self._bbox_diag(landmarks) + 1e-6
-        ratio = d / (0.08 * self.sensitivity * diag)
-        return max(0.0, min(1.0, 1.0 - ratio))
+        distance_score = max(0.0, min(1.0, 1.0 - (distance / (0.05 * self.sensitivity * diag))))
+        
+        # Check if other fingers are in correct positions
+        other_fingers_score = 0.0
+        
+        if tip_idx == 8:  # Index finger
+            middle_curled = not self._finger_extended(landmarks, 12, 10)
+            ring_curled = not self._finger_extended(landmarks, 16, 14)
+            pinky_curled = not self._finger_extended(landmarks, 20, 18)
+            other_fingers_score = (middle_curled + ring_curled + pinky_curled) / 3.0
+        elif tip_idx == 12:  # Middle finger
+            ring_curled = not self._finger_extended(landmarks, 16, 14)
+            pinky_curled = not self._finger_extended(landmarks, 20, 18)
+            other_fingers_score = (ring_curled + pinky_curled) / 2.0
+        elif tip_idx == 16:  # Ring finger
+            pinky_curled = not self._finger_extended(landmarks, 20, 18)
+            other_fingers_score = pinky_curled
+        else:  # Pinky finger
+            other_fingers_score = 1.0  # No additional requirements
+        
+        # Combined confidence score - weight distance more heavily
+        return (distance_score * 0.7) + (other_fingers_score * 0.3)
     
     def _get_swipe_confidence(self, landmarks: List[Any]) -> float:
         """Calculate confidence for swipe gestures."""
@@ -859,6 +1027,9 @@ class GestureProcessor:
                     vy = int(detection.velocity[1] * 100)
                     cv2.arrowedLine(frame, (x, y), (x + vx, y + vy), 
                                    (255, 0, 0), 2)
+                
+                # Draw pinch distances for debugging
+                self._draw_pinch_distances(frame, detection.landmarks.landmark)
         
         # Draw statistics
         stats_text = [
@@ -874,3 +1045,51 @@ class GestureProcessor:
             y_offset += 25
         
         return frame
+        
+    def _draw_pinch_distances(self, frame, landmarks):
+        """Draw pinch distances between thumb and fingers for debugging."""
+        h, w = frame.shape[:2]
+        import math
+        
+        # Draw lines between thumb and each finger
+        thumb_tip = landmarks[4]
+        thumb_pos = (int(thumb_tip.x * w), int(thumb_tip.y * h))
+        
+        for finger_idx, finger_name in [(8, "Index"), (12, "Middle"), (16, "Ring"), (20, "Pinky")]:
+            finger_tip = landmarks[finger_idx]
+            finger_pos = (int(finger_tip.x * w), int(finger_tip.y * h))
+            
+            # Calculate 3D distance
+            distance = math.sqrt(
+                (thumb_tip.x - finger_tip.x) ** 2 + 
+                (thumb_tip.y - finger_tip.y) ** 2 + 
+                (thumb_tip.z - finger_tip.z) ** 2
+            )
+            
+            # Draw line between thumb and finger
+            cv2.line(frame, thumb_pos, finger_pos, (255, 0, 0), 2)
+            
+            # Calculate and display distance
+            midpoint = (
+                (thumb_pos[0] + finger_pos[0]) // 2,
+                (thumb_pos[1] + finger_pos[1]) // 2
+            )
+            
+            # Color based on distance (red for close, green for far)
+            diag = self._bbox_diag(landmarks)
+            normalized_dist = distance / (0.15 * diag)
+            color = (
+                0,  # Blue
+                int(255 * min(1.0, normalized_dist)),  # Green
+                int(255 * max(0.0, 1.0 - normalized_dist))  # Red
+            )
+            
+            cv2.putText(
+                frame,
+                f"{distance:.3f}",
+                midpoint,
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                1
+            )
