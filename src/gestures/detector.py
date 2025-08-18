@@ -1,5 +1,21 @@
 """
-Hand gesture detection module with enhanced features.
+Hand gesture detection module with enhanced features and improved collision handling.
+
+This module provides a sophisticated gesture detection system with the following features:
+1. Multiple gesture type detection (open palm, pinch, fist, etc.)
+2. Confidence-based gesture scoring
+3. Temporal filtering for stability
+4. Priority-based collision resolution
+5. Enhanced handling of conflicting gestures (e.g., pinch vs. open palm)
+
+The collision detection system uses several strategies to resolve conflicts:
+- Gesture priority hierarchy (pinch gestures have higher priority than open palm)
+- Confidence-based filtering (higher confidence gestures are preferred)
+- Temporal stability (consistent gestures are preferred over transient ones)
+- Physical impossibility detection (gestures that cannot occur simultaneously)
+- Graduated confidence penalties for borderline cases
+
+This ensures reliable detection even when gestures might be ambiguous or in transition.
 """
 
 from typing import Dict, List, Set, Tuple, Optional, Any
@@ -83,16 +99,20 @@ class GestureDetectorBase(ABC):
 
 
 class StandardGestureDetector(GestureDetectorBase):
-    """Standard gesture detector with enhanced detection algorithms."""
+    """Standard gesture detector with enhanced detection algorithms and improved collision handling."""
     
     # Define gesture priority levels (higher number = higher priority)
+    # This helps resolve collisions between conflicting gestures
     GESTURE_PRIORITIES = {
-        GestureType.PINCH_INDEX: 10,
-        GestureType.PINCH_MIDDLE: 10,
-        GestureType.PINCH_RING: 10,
-        GestureType.PINCH_PINKY: 10,
-        GestureType.OK_SIGN: 9,
-        GestureType.ROCK_ON: 9,
+        # Pinch gestures have highest priority to resolve conflicts with open palm
+        GestureType.PINCH_INDEX: 12,
+        GestureType.PINCH_MIDDLE: 12,
+        GestureType.PINCH_RING: 12,
+        GestureType.PINCH_PINKY: 12,
+        # Advanced gestures have high priority
+        GestureType.OK_SIGN: 10,
+        GestureType.ROCK_ON: 10,
+        # Basic hand shapes have medium priority
         GestureType.THUMBS_UP: 8,
         GestureType.VICTORY: 7,
         GestureType.THREE: 7,
@@ -107,6 +127,7 @@ class StandardGestureDetector(GestureDetectorBase):
     }
     
     # Define mutually exclusive gesture groups
+    # These groups define gestures that cannot physically occur simultaneously
     MUTUALLY_EXCLUSIVE_GROUPS = [
         # Pinch gestures are mutually exclusive with open palm
         {GestureType.OPEN_PALM, GestureType.PINCH_INDEX, GestureType.PINCH_MIDDLE, 
@@ -114,7 +135,15 @@ class StandardGestureDetector(GestureDetectorBase):
         # Basic hand shapes are mutually exclusive
         {GestureType.OPEN_PALM, GestureType.FIST, GestureType.VICTORY, 
          GestureType.THREE, GestureType.INDEX_ONLY, GestureType.THUMBS_UP},
+        # OK sign conflicts with pinch index
+        {GestureType.OK_SIGN, GestureType.PINCH_INDEX},
+        # Rock on conflicts with certain gestures
+        {GestureType.ROCK_ON, GestureType.OPEN_PALM, GestureType.FIST},
     ]
+    
+    # Minimum confidence threshold for gesture detection
+    # Gestures below this threshold will be filtered out during conflict resolution
+    CONFIDENCE_THRESHOLD = 0.4
     
     def __init__(self, sensitivity: float = 1.0, 
                  enable_motion_gestures: bool = True,
@@ -177,25 +206,61 @@ class StandardGestureDetector(GestureDetectorBase):
         return self._resolve_gesture_conflicts(gestures)
         
     def _resolve_gesture_conflicts(self, detected_gestures: Set[GestureType]) -> Set[GestureType]:
-        """Resolve conflicts between mutually exclusive gestures based on priorities."""
+        """
+        Resolve conflicts between mutually exclusive gestures based on priorities and confidence scores.
+        
+        This enhanced conflict resolution system:
+        1. Filters out low-confidence gestures
+        2. Prioritizes gestures based on their priority level
+        3. Uses confidence scores as a tiebreaker when priorities are equal
+        4. Handles special case conflicts (like pinch vs. open palm)
+        """
         if not detected_gestures:
             return detected_gestures
+        
+        # First, filter out low-confidence gestures
+        filtered_gestures = set()
+        for gesture in detected_gestures:
+            confidence = self.gesture_confidences.get(gesture, 0.0)
+            if confidence >= self.CONFIDENCE_THRESHOLD:
+                filtered_gestures.add(gesture)
+        
+        # If filtering removed all gestures, return the empty set
+        if not filtered_gestures:
+            return filtered_gestures
+        
+        # Special case: Pinch gestures always take precedence over open palm
+        # This handles the specific collision case mentioned in the requirements
+        has_pinch = any(g in {GestureType.PINCH_INDEX, GestureType.PINCH_MIDDLE, 
+                             GestureType.PINCH_RING, GestureType.PINCH_PINKY} 
+                        for g in filtered_gestures)
+        
+        if has_pinch and GestureType.OPEN_PALM in filtered_gestures:
+            filtered_gestures.remove(GestureType.OPEN_PALM)
             
         # Check for conflicts within each mutually exclusive group
         for group in self.MUTUALLY_EXCLUSIVE_GROUPS:
-            intersection = group.intersection(detected_gestures)
+            intersection = group.intersection(filtered_gestures)
             if len(intersection) > 1:
-                # Find the gesture with highest priority in this group
-                highest_priority_gesture = max(
-                    intersection, 
-                    key=lambda g: self.GESTURE_PRIORITIES.get(g, 0)
-                )
+                # Find gestures with highest priority in this group
+                max_priority = max(self.GESTURE_PRIORITIES.get(g, 0) for g in intersection)
+                highest_priority_gestures = [g for g in intersection 
+                                           if self.GESTURE_PRIORITIES.get(g, 0) == max_priority]
+                
+                # If multiple gestures have the same priority, use confidence as tiebreaker
+                if len(highest_priority_gestures) > 1:
+                    highest_confidence_gesture = max(
+                        highest_priority_gestures,
+                        key=lambda g: self.gesture_confidences.get(g, 0.0)
+                    )
+                    highest_priority_gestures = [highest_confidence_gesture]
+                
                 # Remove all other gestures from this group
                 for gesture in intersection:
-                    if gesture != highest_priority_gesture:
-                        detected_gestures.remove(gesture)
+                    if gesture not in highest_priority_gestures:
+                        filtered_gestures.remove(gesture)
                         
-        return detected_gestures
+        return filtered_gestures
     
     def get_confidence(self, gesture_type: GestureType, landmarks: Any) -> float:
         """Calculate confidence score for a specific gesture."""
@@ -248,27 +313,37 @@ class StandardGestureDetector(GestureDetectorBase):
     
     def _is_open_palm(self, landmarks: List[Any]) -> bool:
         """
-        Detect open palm gesture.
+        Detect open palm gesture with enhanced collision handling.
         
         An open palm is detected when all five fingers (including thumb) are extended
-        and there are no active pinch gestures.
+        and there are no active pinch gestures. This implementation includes improved
+        confidence scoring to better handle conflicts with pinch gestures.
         """
         # Check if all fingers are extended
-        all_fingers_extended = all([
+        finger_extension = [
             self._thumb_extended(landmarks),          # Thumb
             self._finger_extended(landmarks, 8, 6),   # Index
             self._finger_extended(landmarks, 12, 10), # Middle
             self._finger_extended(landmarks, 16, 14), # Ring
             self._finger_extended(landmarks, 20, 18)  # Pinky
-        ])
+        ]
+        all_fingers_extended = all(finger_extension)
         
-        # Check that no pinch gestures are active
-        no_pinch_active = not any([
-            self._is_pinch(landmarks, 8),  # Index pinch
-            self._is_pinch(landmarks, 12), # Middle pinch
-            self._is_pinch(landmarks, 16), # Ring pinch
-            self._is_pinch(landmarks, 20)  # Pinky pinch
-        ])
+        # Check for potential pinch gestures
+        pinch_distances = [
+            self._l2_distance(landmarks[4], landmarks[8]),   # Thumb-Index distance
+            self._l2_distance(landmarks[4], landmarks[12]),  # Thumb-Middle distance
+            self._l2_distance(landmarks[4], landmarks[16]),  # Thumb-Ring distance
+            self._l2_distance(landmarks[4], landmarks[20])   # Thumb-Pinky distance
+        ]
+        
+        # Normalize distances by hand size
+        diag = self._bbox_diag(landmarks) + 1e-6
+        normalized_distances = [d / diag for d in pinch_distances]
+        
+        # Check if any pinch gestures are active
+        pinch_threshold = 0.08 * self.sensitivity
+        pinch_active = any(d < pinch_threshold for d in normalized_distances)
         
         # Calculate confidence score for open palm
         confidence = 0.0
@@ -279,15 +354,26 @@ class StandardGestureDetector(GestureDetectorBase):
             # Increase confidence if fingers are well-separated
             if self._fingers_are_spread(landmarks):
                 confidence += 0.2
+            
+            # Calculate pinch-related confidence penalty
+            # The closer any finger is to the thumb, the lower the confidence
+            min_normalized_distance = min(normalized_distances)
+            pinch_ratio = min_normalized_distance / pinch_threshold
+            
+            # Apply a graduated penalty based on how close we are to a pinch
+            if pinch_ratio < 2.0:  # Within 2x the pinch threshold
+                # Penalty increases as we get closer to pinch threshold
+                penalty = 0.4 * max(0, 1 - (pinch_ratio / 2.0))
+                confidence -= penalty
                 
-            # Decrease confidence if any finger is close to thumb
-            if not no_pinch_active:
-                confidence -= 0.3
+        # Ensure confidence is within valid range
+        confidence = max(0.0, min(1.0, confidence))
                 
         # Store confidence score for later use
         self.gesture_confidences[GestureType.OPEN_PALM] = confidence
         
-        return all_fingers_extended and no_pinch_active
+        # Only detect open palm if all fingers are extended and no pinch is active
+        return all_fingers_extended and not pinch_active
     
     def _is_fist(self, landmarks: List[Any]) -> bool:
         """Detect fist gesture."""
@@ -730,7 +816,15 @@ class GestureProcessor:
     def _apply_temporal_filtering(self, 
                                  raw_detections: List[GestureDetection],
                                  current_gestures_by_hand: Dict[int, Set[GestureType]]) -> List[GestureDetection]:
-        """Apply temporal filtering to stabilize gesture detection."""
+        """
+        Apply temporal filtering to stabilize gesture detection with enhanced collision handling.
+        
+        This improved temporal filtering:
+        1. Considers gesture priorities when determining stability
+        2. Requires higher stability for lower-priority gestures to override higher-priority ones
+        3. Handles special case conflicts between pinch and open palm gestures
+        4. Adjusts stability thresholds based on gesture confidence
+        """
         filtered_detections = []
         
         # Update gesture history for each hand
@@ -752,27 +846,68 @@ class GestureProcessor:
                 key = (hand_idx, gesture)
                 if key not in self.gesture_stability_count:
                     self.gesture_stability_count[key] = 0
-                self.gesture_stability_count[key] += 1
+                
+                # Get confidence for this gesture
+                confidence = 0.0
+                for detection in raw_detections:
+                    if detection.hand_index == hand_idx and detection.gesture_type == gesture:
+                        confidence = detection.confidence
+                        break
+                
+                # Adjust stability increment based on confidence and priority
+                priority = self.detector.GESTURE_PRIORITIES.get(gesture, 0)
+                
+                # Higher confidence and priority gestures gain stability faster
+                increment = 1.0
+                if confidence > 0.8:  # High confidence
+                    increment += 0.5
+                if priority >= 10:     # High priority (pinch gestures)
+                    increment += 0.5
+                
+                self.gesture_stability_count[key] += increment
             
             # Decrease counts for gestures not in current frame
             for key in list(self.gesture_stability_count.keys()):
                 h_idx, gesture = key
                 if h_idx == hand_idx and gesture not in gestures:
-                    self.gesture_stability_count[key] = max(0, self.gesture_stability_count[key] - 1)
+                    # Higher priority gestures decay slower
+                    priority = self.detector.GESTURE_PRIORITIES.get(gesture, 0)
+                    decay_rate = 1.0
+                    if priority >= 10:  # High priority (pinch gestures)
+                        decay_rate = 0.7  # Slower decay for high priority gestures
+                    
+                    self.gesture_stability_count[key] = max(0, self.gesture_stability_count[key] - decay_rate)
+                    
                     # Remove if count reaches zero
                     if self.gesture_stability_count[key] == 0:
                         del self.gesture_stability_count[key]
         
-        # Determine stable gestures
+        # Determine stable gestures with priority-based conflict resolution
         stable_gestures: Dict[int, Set[GestureType]] = {}
         for hand_idx in current_gestures_by_hand.keys():
             stable_gestures[hand_idx] = set()
             
-            # Check each gesture's stability
+            # Get all potentially stable gestures for this hand
+            potential_stable_gestures = []
             for key, count in self.gesture_stability_count.items():
                 h_idx, gesture = key
-                if h_idx == hand_idx and count >= self.min_gesture_frames:
-                    stable_gestures[hand_idx].add(gesture)
+                if h_idx == hand_idx:
+                    # Adjust stability threshold based on priority
+                    priority = self.detector.GESTURE_PRIORITIES.get(gesture, 0)
+                    
+                    # Higher priority gestures need fewer frames to be considered stable
+                    threshold_adjustment = 0
+                    if priority >= 10:  # High priority (pinch gestures)
+                        threshold_adjustment = -1  # Require one fewer frame
+                    
+                    adjusted_threshold = max(1, self.min_gesture_frames + threshold_adjustment)
+                    
+                    if count >= adjusted_threshold:
+                        potential_stable_gestures.append(gesture)
+            
+            # Resolve conflicts between stable gestures using detector's conflict resolution
+            if potential_stable_gestures:
+                stable_gestures[hand_idx] = self.detector._resolve_gesture_conflicts(set(potential_stable_gestures))
         
         # Filter raw detections based on stable gestures
         for detection in raw_detections:
