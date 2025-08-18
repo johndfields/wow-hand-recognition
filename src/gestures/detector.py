@@ -679,7 +679,8 @@ class GestureProcessor:
                  confidence_threshold: float = 0.6,
                  temporal_smoothing: bool = True,
                  smoothing_window: int = 3,
-                 min_gesture_frames: int = 2):
+                 min_gesture_frames: int = 2,
+                 resource_cleanup_interval: int = 300):  # Cleanup every 300 frames
         
         self.detector = detector
         self.enable_multi_hand = enable_multi_hand
@@ -690,6 +691,8 @@ class GestureProcessor:
         self.temporal_smoothing = temporal_smoothing
         self.smoothing_window = smoothing_window
         self.min_gesture_frames = min_gesture_frames
+        self.resource_cleanup_interval = resource_cleanup_interval
+        self.frames_since_cleanup = 0
         
         # MediaPipe setup
         self.mp_hands = mp.solutions.hands
@@ -725,6 +728,12 @@ class GestureProcessor:
         try:
             import platform
             
+            # Check for environment variables that might affect MediaPipe
+            import os
+            mp_debug = os.environ.get('MEDIAPIPE_DEBUG', '0') == '1'
+            if mp_debug:
+                logger.info("MediaPipe debug mode enabled")
+                
             # Platform-specific MediaPipe initialization
             if platform.system() == "Darwin":  # macOS
                 # On macOS, we need special handling for Metal GPU backend
@@ -784,15 +793,49 @@ class GestureProcessor:
                     )
                     self.mediapipe_initialized = True
             else:
-                # Standard initialization for other platforms
-                self.hands = self.mp_hands.Hands(
-                    static_image_mode=False,
-                    max_num_hands=self.max_hands,
-                    model_complexity=1 if not enable_gpu else 2,
-                    min_detection_confidence=confidence_threshold,
-                    min_tracking_confidence=confidence_threshold
-                )
-                self.mediapipe_initialized = True
+                # Platform-specific initialization for Windows/Linux
+                if platform.system() == "Windows":
+                    # Windows-specific initialization
+                    logger.info("Initializing MediaPipe for Windows")
+                    
+                    # Pre-initialize GPU context for Windows if using GPU
+                    if enable_gpu:
+                        try:
+                            # For Windows, ensure DirectX/OpenGL context is ready
+                            import cv2
+                            test_frame = np.zeros((64, 64, 3), dtype=np.uint8)
+                            gpu_mat = cv2.UMat(test_frame)
+                            _ = cv2.GaussianBlur(gpu_mat, (5, 5), 0)
+                            logger.info("Windows GPU context pre-initialized successfully")
+                        except Exception as win_gpu_error:
+                            logger.warning(f"Windows GPU pre-initialization failed: {win_gpu_error}")
+                    
+                    # Standard initialization for Windows
+                    self.hands = self.mp_hands.Hands(
+                        static_image_mode=False,
+                        max_num_hands=self.max_hands,
+                        model_complexity=1 if not enable_gpu else 2,
+                        min_detection_confidence=confidence_threshold,
+                        min_tracking_confidence=confidence_threshold
+                    )
+                    
+                    # Test initialization
+                    test_frame = np.zeros((64, 64, 3), dtype=np.uint8)
+                    _ = self.hands.process(test_frame)
+                    
+                    logger.info("MediaPipe initialized successfully on Windows")
+                    self.mediapipe_initialized = True
+                else:
+                    # Standard initialization for other platforms (Linux, etc.)
+                    logger.info(f"Initializing MediaPipe for {platform.system()}")
+                    self.hands = self.mp_hands.Hands(
+                        static_image_mode=False,
+                        max_num_hands=self.max_hands,
+                        model_complexity=1 if not enable_gpu else 2,
+                        min_detection_confidence=confidence_threshold,
+                        min_tracking_confidence=confidence_threshold
+                    )
+                    self.mediapipe_initialized = True
         except Exception as e:
             logger.error(f"Error initializing MediaPipe Hands: {e}")
             logger.warning("Falling back to basic gesture detection without MediaPipe")
@@ -808,15 +851,49 @@ class GestureProcessor:
             logger.info("Gesture processor started")
     
     def stop(self):
-        """Stop the processing thread."""
+        """Stop the processing thread and release resources."""
         self.is_running = False
         if self.processing_thread:
             self.processing_thread.join(timeout=2.0)
             logger.info("Gesture processor stopped")
+        
+        # Release MediaPipe resources
+        self._release_mediapipe_resources()
+        
+    def _release_mediapipe_resources(self):
+        """Explicitly release MediaPipe resources to prevent memory leaks."""
+        try:
+            if hasattr(self, 'hands') and self.hands:
+                # Close MediaPipe graph
+                self.hands.close()
+                logger.info("MediaPipe resources released")
+        except Exception as e:
+            logger.error(f"Error releasing MediaPipe resources: {e}")
+            
+    def _perform_resource_cleanup(self):
+        """Perform periodic resource cleanup to prevent memory leaks."""
+        try:
+            # Force garbage collection
+            import gc
+            gc.collect()
+            
+            # Log memory usage if psutil is available
+            try:
+                import psutil
+                process = psutil.Process()
+                memory_info = process.memory_info()
+                logger.debug(f"Memory usage: {memory_info.rss / 1024 / 1024:.2f} MB")
+            except ImportError:
+                pass  # psutil not available
+                
+            logger.debug("Performed resource cleanup")
+        except Exception as e:
+            logger.error(f"Error during resource cleanup: {e}")
     
     def process_frame(self, frame: np.ndarray) -> List[GestureDetection]:
         """Process a single frame and return detected gestures."""
         self.frame_counter += 1
+        self.frames_since_cleanup += 1
         
         # Frame skipping for performance
         if self.frame_skip > 0 and self.frame_counter % (self.frame_skip + 1) != 0:
@@ -832,6 +909,11 @@ class GestureProcessor:
         if not hasattr(self, 'mediapipe_initialized') or not self.mediapipe_initialized:
             logger.warning("MediaPipe not initialized, returning empty detections")
             return []
+            
+        # Periodically perform resource cleanup to prevent memory leaks
+        if self.frames_since_cleanup >= self.resource_cleanup_interval:
+            self._perform_resource_cleanup()
+            self.frames_since_cleanup = 0
         
         try:
             # Convert to RGB
@@ -1170,6 +1252,13 @@ class GestureProcessor:
                     logger.warning(f"Too many consecutive errors ({consecutive_errors}), attempting recovery...")
                     
                     try:
+                        # First, release existing MediaPipe resources
+                        self._release_mediapipe_resources()
+                        
+                        # Force garbage collection
+                        import gc
+                        gc.collect()
+                        
                         # Attempt to reinitialize MediaPipe
                         import platform
                         if platform.system() == "Darwin":  # macOS
@@ -1191,9 +1280,38 @@ class GestureProcessor:
                                 min_detection_confidence=self.confidence_threshold,
                                 min_tracking_confidence=self.confidence_threshold
                             )
+                            
+                            # Test with a dummy frame
+                            test_frame = np.zeros((64, 64, 3), dtype=np.uint8)
+                            _ = self.hands.process(test_frame)
+                            
+                        elif platform.system() == "Windows":  # Windows
+                            logger.info("Reinitializing MediaPipe for Windows after multiple errors")
+                            
+                            # Pre-initialize GPU context for Windows
+                            if self.enable_gpu:
+                                import cv2
+                                test_frame = np.zeros((64, 64, 3), dtype=np.uint8)
+                                gpu_mat = cv2.UMat(test_frame)
+                                _ = cv2.GaussianBlur(gpu_mat, (5, 5), 0)
+                                logger.info("Windows GPU context pre-initialized for recovery")
+                            
+                            # Reinitialize with lower complexity
+                            self.hands = self.mp_hands.Hands(
+                                static_image_mode=False,
+                                max_num_hands=self.max_hands,
+                                model_complexity=1,  # Use lower complexity for stability
+                                min_detection_confidence=self.confidence_threshold,
+                                min_tracking_confidence=self.confidence_threshold
+                            )
+                            
+                            # Test with a dummy frame
+                            test_frame = np.zeros((64, 64, 3), dtype=np.uint8)
+                            _ = self.hands.process(test_frame)
+                            
                         else:
-                            # For other platforms
-                            logger.info("Reinitializing MediaPipe after multiple errors")
+                            # For other platforms (Linux, etc.)
+                            logger.info(f"Reinitializing MediaPipe for {platform.system()} after multiple errors")
                             self.hands = self.mp_hands.Hands(
                                 static_image_mode=False,
                                 max_num_hands=self.max_hands,
