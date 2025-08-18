@@ -1,698 +1,409 @@
-#!/usr/bin/env python3
 """
-Hand to Key - Advanced Hand Gesture Control System
-Main application with all enhancements integrated.
+Unified entry point for the hand gesture recognition application.
+This module provides a single entry point that supports both the simple and modular
+implementation modes.
 """
 
-import sys
-import os
 import argparse
 import logging
-import time
-import threading
-import queue
+import sys
+import os
 from pathlib import Path
-from typing import Optional, Dict, Any, List
-import cv2
-import numpy as np
-from dataclasses import dataclass
 import json
-
-# Add src to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from gestures.detector import (
-    GestureProcessor, StandardGestureDetector, CustomGestureDetector,
-    GestureType, GestureDetection
-)
-from input.handler import (
-    UnifiedInputHandler, InputAction, InputSequence,
-    InputType, InputMode
-)
-from config.manager import (
-    ConfigurationManager, GestureMapping
-)
-from utils.camera import CameraManager, CameraSelector
-# Import utility modules
-from utils.stubs import (
-    AudioFeedback, StatisticsTracker, CrashHandler,
-    OverlayRenderer, CalibrationMode, VoiceCommandHandler,
-    SystemTrayApp
-)
+import time
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log')
+    ]
 )
+
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class ApplicationState:
-    """Maintains application state."""
-    is_running: bool = True
-    is_paused: bool = False
-    is_recording: bool = False
-    is_calibrating: bool = False
-    current_profile: str = ""
-    gesture_history: List[GestureDetection] = None
-    performance_mode: str = "balanced"  # low, balanced, high
-    
-    def __post_init__(self):
-        if self.gesture_history is None:
-            self.gesture_history = []
-
-
-class HandToKeyApplication:
-    """Main application class with all enhancements."""
-    
-    def __init__(self, args: argparse.Namespace):
-        self.args = args
-        self.state = ApplicationState()
-        
-        # Initialize components
-        self._initialize_config()
-        self._initialize_camera()
-        self._initialize_gesture_processor()
-        self._initialize_input_handler()
-        self._initialize_ui()
-        self._initialize_audio()
-        self._initialize_accessibility()
-        self._initialize_platform_integration()
-        self._initialize_crash_handler()
-        
-        # Statistics
-        self.stats_tracker = StatisticsTracker()
-        
-        # Threading
-        self.main_thread = threading.current_thread()
-        self.processing_queue = queue.Queue(maxsize=60)
-        self.shutdown_event = threading.Event()
-        
-        logger.info("Hand to Key application initialized")
-    
-    def _initialize_config(self):
-        """Initialize configuration management."""
-        config_dir = self.args.config_dir or "./config"
-        self.config_manager = ConfigurationManager(config_dir)
-        
-        # Create default profiles if none exist
-        if not self.config_manager.profiles:
-            self.config_manager.create_default_profiles()
-        
-        # Load or activate profile
-        if self.args.profile:
-            self.config_manager.activate_profile(self.args.profile)
-        elif not self.config_manager.active_profile:
-            profiles = self.config_manager.get_all_profiles()
-            if profiles:
-                self.config_manager.activate_profile(profiles[0])
-        
-        # Start hot-reload if enabled
-        if self.args.hot_reload:
-            self.config_manager.start_hot_reload()
-            self.config_manager.add_reload_callback(self._on_config_reload)
-        
-        # Update state
-        if self.config_manager.active_profile:
-            self.state.current_profile = self.config_manager.active_profile.name
-    
-    def _initialize_camera(self):
-        """Initialize camera with auto-selection and adaptive quality."""
-        settings = self.config_manager.settings
-        
-        # Auto-select camera if needed
-        if self.args.auto_camera:
-            selector = CameraSelector()
-            camera_index = selector.select_best_camera()
-            logger.info(f"Auto-selected camera index: {camera_index}")
-        else:
-            camera_index = self.args.camera or settings.camera_index
-        
-        # Initialize camera manager
-        self.camera_manager = CameraManager(
-            camera_index=camera_index,
-            width=settings.camera_width,
-            height=settings.camera_height,
-            fps=settings.camera_fps,
-            adaptive_quality=settings.adaptive_quality
-        )
-        
-        if not self.camera_manager.start():
-            logger.error("Failed to initialize camera")
-            sys.exit(1)
-    
-    def _initialize_gesture_processor(self):
-        """Initialize gesture detection and processing."""
-        settings = self.config_manager.settings
-        
-        # Create detector
-        if self.args.custom_gestures:
-            detector = CustomGestureDetector(self.args.model_path)
-        else:
-            detector = StandardGestureDetector(
-                sensitivity=settings.gesture_sensitivity,
-                enable_motion_gestures=True,
-                enable_custom_gestures=False
-            )
-        
-        # Create processor with optimizations
-        self.gesture_processor = GestureProcessor(
-            detector=detector,
-            enable_multi_hand=settings.enable_multi_hand,
-            max_hands=settings.max_hands,
-            enable_gpu=settings.enable_gpu,
-            frame_skip=settings.frame_skip,
-            confidence_threshold=settings.min_detection_confidence
-        )
-        
-        # Start processing thread if threading enabled
-        if self.args.threading:
-            self.gesture_processor.start()
-    
-    def _initialize_input_handler(self):
-        """Initialize unified input handler."""
-        self.input_handler = UnifiedInputHandler()
-        self.input_handler.start()
-        
-        # Bind gestures from active profile
-        self._update_gesture_bindings()
-    
-    def _initialize_ui(self):
-        """Initialize UI components."""
-        settings = self.config_manager.settings
-        
-        # Create overlay renderer
-        self.overlay_renderer = OverlayRenderer(
-            show_statistics=settings.show_statistics,
-            show_debug_info=settings.show_debug_info,
-            ui_scale=settings.ui_scale,
-            theme=settings.theme
-        )
-        
-        # Create calibration mode
-        self.calibration_mode = CalibrationMode(
-            gesture_processor=self.gesture_processor,
-            overlay_renderer=self.overlay_renderer
-        )
-    
-    def _initialize_audio(self):
-        """Initialize audio feedback system."""
-        settings = self.config_manager.settings
-        
-        if settings.enable_sound_feedback:
-            self.audio_feedback = AudioFeedback(
-                volume=settings.sound_volume,
-                enabled=True
-            )
-        else:
-            self.audio_feedback = None
-    
-    def _initialize_accessibility(self):
-        """Initialize accessibility features."""
-        settings = self.config_manager.settings
-        
-        if settings.voice_commands:
-            self.voice_handler = VoiceCommandHandler(
-                command_callback=self._handle_voice_command
-            )
-            self.voice_handler.start()
-        else:
-            self.voice_handler = None
-        
-        # Apply accessibility settings
-        if settings.accessibility_mode:
-            self._apply_accessibility_settings()
-    
-    def _initialize_platform_integration(self):
-        """Initialize platform-specific integrations."""
-        if self.args.system_tray:
-            self.system_tray = SystemTrayApp(
-                app_controller=self,
-                profiles=self.config_manager.get_all_profiles()
-            )
-            threading.Thread(target=self.system_tray.run, daemon=True).start()
-        else:
-            self.system_tray = None
-    
-    def _initialize_crash_handler(self):
-        """Initialize crash recovery system."""
-        self.crash_handler = CrashHandler(
-            app_restart_callback=self.restart,
-            state_save_callback=self.save_state,
-            state_load_callback=self.load_state
-        )
-        self.crash_handler.register()
-    
-    def _update_gesture_bindings(self):
-        """Update gesture bindings from configuration."""
-        if not self.config_manager.active_profile:
-            return
-        
-        # Clear existing bindings
-        for gesture in list(self.input_handler.gesture_bindings.keys()):
-            self.input_handler.unbind_gesture(gesture)
-        
-        # Add new bindings
-        for mapping in self.config_manager.active_profile.gesture_mappings:
-            if not mapping.enabled:
-                continue
-            
-            # Create input action
-            input_type = self._get_input_type(mapping.action_type)
-            input_mode = self._get_input_mode(mapping.mode)
-            
-            action = InputAction(
-                input_type=input_type,
-                target=mapping.target,
-                mode=input_mode,
-                duration=mapping.duration,
-                metadata=mapping.metadata
-            )
-            
-            self.input_handler.bind_gesture(mapping.gesture, action)
-            logger.debug(f"Bound gesture '{mapping.gesture}' to {mapping.action_type}:{mapping.target}")
-    
-    def _get_input_type(self, action_type: str) -> InputType:
-        """Convert action type string to InputType enum."""
-        type_map = {
-            'key': InputType.KEY_PRESS,
-            'mouse': InputType.MOUSE_CLICK,
-            'gamepad': InputType.GAMEPAD_BUTTON,
-            'macro': InputType.MACRO
-        }
-        return type_map.get(action_type, InputType.KEY_PRESS)
-    
-    def _get_input_mode(self, mode: str) -> InputMode:
-        """Convert mode string to InputMode enum."""
-        mode_map = {
-            'tap': InputMode.TAP,
-            'hold': InputMode.HOLD,
-            'toggle': InputMode.TOGGLE,
-            'double_tap': InputMode.DOUBLE_TAP,
-            'long_press': InputMode.LONG_PRESS
-        }
-        return mode_map.get(mode, InputMode.TAP)
-    
-    def _on_config_reload(self, file_path: Any):
-        """Handle configuration reload event."""
-        logger.info(f"Configuration reloaded: {file_path}")
-        self._update_gesture_bindings()
-        
-        # Update settings
-        settings = self.config_manager.settings
-        if self.audio_feedback:
-            self.audio_feedback.set_volume(settings.sound_volume)
-            self.audio_feedback.set_enabled(settings.enable_sound_feedback)
-    
-    def _handle_voice_command(self, command: str):
-        """Handle voice command."""
-        logger.info(f"Voice command: {command}")
-        
-        # Parse and execute command
-        if "pause" in command.lower():
-            self.toggle_pause()
-        elif "resume" in command.lower():
-            self.resume()
-        elif "profile" in command.lower():
-            # Extract profile name and switch
-            words = command.lower().split()
-            if "profile" in words:
-                idx = words.index("profile")
-                if idx + 1 < len(words):
-                    profile_name = words[idx + 1]
-                    self.switch_profile(profile_name)
-        elif "calibrate" in command.lower():
-            self.start_calibration()
-        elif "stop" in command.lower() or "quit" in command.lower():
-            self.stop()
-    
-    def _apply_accessibility_settings(self):
-        """Apply accessibility settings."""
-        settings = self.config_manager.settings
-        
-        if settings.high_contrast:
-            self.overlay_renderer.enable_high_contrast()
-        
-        if settings.large_text:
-            self.overlay_renderer.set_text_scale(1.5)
-        
-        # Adjust gesture sensitivity for accessibility
-        if self.gesture_processor.detector:
-            self.gesture_processor.detector.sensitivity = settings.gesture_sensitivity * 1.2
-    
-    def run(self):
-        """Main application loop."""
-        logger.info("Starting Hand to Key application")
-        
-        try:
-            while self.state.is_running and not self.shutdown_event.is_set():
-                # Check if paused
-                if self.state.is_paused:
-                    time.sleep(0.1)
-                    continue
-                
-                # Get frame from camera
-                frame = self.camera_manager.get_frame()
-                if frame is None:
-                    continue
-                
-                # Process frame
-                self._process_frame(frame)
-                
-                # Handle keyboard input
-                key = cv2.waitKey(1) & 0xFF
-                self._handle_keyboard(key)
-                
-                # Update statistics
-                self.stats_tracker.update()
-                
-        except KeyboardInterrupt:
-            logger.info("Received keyboard interrupt")
-        except Exception as e:
-            logger.error(f"Error in main loop: {e}")
-            self.crash_handler.handle_crash(e)
-        finally:
-            self.cleanup()
-    
-    def _process_frame(self, frame: np.ndarray):
-        """Process a single frame."""
-        # Flip frame for mirror effect
-        frame = cv2.flip(frame, 1)
-        
-        # Detect gestures
-        if self.args.threading:
-            self.gesture_processor.process_frame_async(frame)
-            detections = self.gesture_processor.get_results() or []
-        else:
-            detections = self.gesture_processor.process_frame(frame)
-        
-        # Process detections
-        for detection in detections:
-            self._handle_gesture(detection)
-        
-        # Update gesture history
-        self.state.gesture_history.extend(detections)
-        if len(self.state.gesture_history) > 100:
-            self.state.gesture_history = self.state.gesture_history[-100:]
-        
-        # Render overlay
-        if self.config_manager.settings.show_preview:
-            # Draw debug info
-            if self.config_manager.settings.show_debug_info:
-                frame = self.gesture_processor.draw_debug_info(frame, detections)
-            
-            # Draw overlay
-            frame = self.overlay_renderer.render(
-                frame,
-                detections=detections,
-                stats=self._get_stats(),
-                state=self.state
-            )
-            
-            # Show calibration if active
-            if self.state.is_calibrating:
-                frame = self.calibration_mode.render(frame)
-            
-            # Display frame
-            cv2.imshow("Hand to Key - Enhanced", frame)
-    
-    def _handle_gesture(self, detection: GestureDetection):
-        """Handle a detected gesture."""
-        gesture_name = detection.gesture_type.value
-        
-        # Check if in calibration mode
-        if self.state.is_calibrating:
-            self.calibration_mode.record_gesture(detection)
-            return
-        
-        # Check if recording
-        if self.state.is_recording:
-            # Recording handled separately
-            return
-        
-        # Execute gesture action
-        success = self.input_handler.execute_gesture(gesture_name)
-        
-        # Play audio feedback
-        if success and self.audio_feedback:
-            self.audio_feedback.play_gesture_sound(gesture_name)
-        
-        # Update statistics
-        self.stats_tracker.record_gesture(gesture_name, success)
-    
-    def _handle_keyboard(self, key: int):
-        """Handle keyboard input."""
-        if key == ord('q'):
-            self.stop()
-        elif key == ord('p'):
-            self.toggle_pause()
-        elif key == ord('c'):
-            self.start_calibration()
-        elif key == ord('r'):
-            self.toggle_recording()
-        elif key == ord('s'):
-            self.save_settings()
-        elif key == ord('h'):
-            self.show_help()
-        elif key >= ord('1') and key <= ord('9'):
-            # Switch profile by number
-            profile_idx = key - ord('1')
-            profiles = self.config_manager.get_all_profiles()
-            if profile_idx < len(profiles):
-                self.switch_profile(profiles[profile_idx])
-    
-    def _get_stats(self) -> Dict[str, Any]:
-        """Get current statistics."""
-        stats = {
-            'fps': self.camera_manager.get_fps(),
-            'gestures_detected': self.stats_tracker.total_gestures,
-            'success_rate': self.stats_tracker.get_success_rate(),
-            'profile': self.state.current_profile,
-            'gesture_stats': self.gesture_processor.get_statistics(),
-            'input_stats': self.input_handler.get_statistics()
-        }
-        return stats
-    
-    def toggle_pause(self):
-        """Toggle pause state."""
-        self.state.is_paused = not self.state.is_paused
-        logger.info(f"Application {'paused' if self.state.is_paused else 'resumed'}")
-        
-        if self.audio_feedback:
-            self.audio_feedback.play_system_sound('pause' if self.state.is_paused else 'resume')
-    
-    def resume(self):
-        """Resume from pause."""
-        self.state.is_paused = False
-        logger.info("Application resumed")
-    
-    def start_calibration(self):
-        """Start calibration mode."""
-        if not self.state.is_calibrating:
-            self.state.is_calibrating = True
-            self.calibration_mode.start()
-            logger.info("Calibration mode started")
-        else:
-            self.stop_calibration()
-    
-    def stop_calibration(self):
-        """Stop calibration mode."""
-        if self.state.is_calibrating:
-            self.state.is_calibrating = False
-            results = self.calibration_mode.stop()
-            logger.info(f"Calibration completed: {results}")
-            
-            # Apply calibration results
-            if results:
-                self._apply_calibration(results)
-    
-    def _apply_calibration(self, results: Dict[str, Any]):
-        """Apply calibration results."""
-        # Update gesture sensitivity based on calibration
-        if 'sensitivity' in results:
-            self.config_manager.settings.gesture_sensitivity = results['sensitivity']
-            self.gesture_processor.detector.sensitivity = results['sensitivity']
-        
-        # Save settings
-        self.config_manager.save_settings()
-    
-    def toggle_recording(self):
-        """Toggle macro recording."""
-        if not self.state.is_recording:
-            self.state.is_recording = True
-            self.input_handler.start_recording('all')
-            logger.info("Macro recording started")
-        else:
-            self.state.is_recording = False
-            macro_name = f"macro_{int(time.time())}"
-            sequence = self.input_handler.stop_recording(macro_name)
-            logger.info(f"Macro recording stopped, saved as '{macro_name}' with {len(sequence.actions)} actions")
-    
-    def switch_profile(self, profile_name: str):
-        """Switch to a different profile."""
-        if self.config_manager.activate_profile(profile_name):
-            self.state.current_profile = profile_name
-            self._update_gesture_bindings()
-            logger.info(f"Switched to profile: {profile_name}")
-            
-            if self.audio_feedback:
-                self.audio_feedback.play_system_sound('profile_switch')
-    
-    def save_settings(self):
-        """Save current settings."""
-        self.config_manager.save_settings()
-        if self.config_manager.active_profile:
-            self.config_manager.save_profile(self.config_manager.active_profile)
-        logger.info("Settings saved")
-    
-    def save_state(self) -> Dict[str, Any]:
-        """Save application state for crash recovery."""
-        state = {
-            'profile': self.state.current_profile,
-            'is_paused': self.state.is_paused,
-            'gesture_history': [
-                {
-                    'gesture': g.gesture_type.value,
-                    'confidence': g.confidence,
-                    'timestamp': g.timestamp
-                }
-                for g in self.state.gesture_history[-10:]
-            ],
-            'stats': self.stats_tracker.get_summary()
-        }
-        return state
-    
-    def load_state(self, state: Dict[str, Any]):
-        """Load application state after crash recovery."""
-        if 'profile' in state:
-            self.switch_profile(state['profile'])
-        
-        if 'is_paused' in state:
-            self.state.is_paused = state['is_paused']
-        
-        logger.info("State restored after crash recovery")
-    
-    def restart(self):
-        """Restart the application."""
-        logger.info("Restarting application...")
-        self.cleanup()
-        
-        # Re-initialize
-        self.__init__(self.args)
-        self.run()
-    
-    def show_help(self):
-        """Display help information."""
-        help_text = """
-        Hand to Key - Keyboard Shortcuts:
-        
-        q - Quit application
-        p - Pause/Resume
-        c - Start/Stop calibration
-        r - Start/Stop macro recording
-        s - Save settings
-        h - Show this help
-        1-9 - Switch to profile by number
-        """
-        logger.info(help_text)
-        print(help_text)
-    
-    def stop(self):
-        """Stop the application."""
-        logger.info("Stopping application...")
-        self.state.is_running = False
-        self.shutdown_event.set()
-    
-    def cleanup(self):
-        """Clean up resources."""
-        logger.info("Cleaning up resources...")
-        
-        # Stop components
-        if hasattr(self, 'gesture_processor'):
-            self.gesture_processor.stop()
-        
-        if hasattr(self, 'input_handler'):
-            self.input_handler.stop()
-        
-        if hasattr(self, 'camera_manager'):
-            self.camera_manager.stop()
-        
-        if hasattr(self, 'config_manager'):
-            self.config_manager.stop_hot_reload()
-        
-        if hasattr(self, 'voice_handler') and self.voice_handler:
-            self.voice_handler.stop()
-        
-        if hasattr(self, 'crash_handler'):
-            self.crash_handler.unregister()
-        
-        # Close windows
-        cv2.destroyAllWindows()
-        
-        logger.info("Cleanup completed")
-
-
-def main():
-    """Main entry point."""
+def setup_argument_parser():
+    """Set up command line argument parser."""
     parser = argparse.ArgumentParser(
-        description="Hand to Key - Advanced Hand Gesture Control System"
+        description="Hand Gesture Recognition for Input Control"
+    )
+    
+    # Mode selection
+    parser.add_argument(
+        '--mode', 
+        choices=['simple', 'modular', 'auto'],
+        default='auto',
+        help='Application mode: simple, modular, or auto-detect (default: auto)'
+    )
+    
+    # Configuration
+    parser.add_argument(
+        '--config', 
+        type=str,
+        help='Path to configuration file'
+    )
+    
+    parser.add_argument(
+        '--profile', 
+        type=str,
+        help='Profile name to use (modular mode only)'
+    )
+    
+    # Migration
+    parser.add_argument(
+        '--migrate', 
+        action='store_true',
+        help='Migrate configuration from simple to modular format'
+    )
+    
+    parser.add_argument(
+        '--migrate-dir', 
+        type=str,
+        help='Directory containing simple configurations to migrate'
     )
     
     # Camera options
-    parser.add_argument('--camera', type=int, default=0,
-                       help='Camera index (default: 0)')
-    parser.add_argument('--auto-camera', action='store_true',
-                       help='Auto-select best camera')
+    parser.add_argument(
+        '--camera', 
+        type=int, 
+        default=0,
+        help='Camera index to use'
+    )
     
-    # Configuration options
-    parser.add_argument('--config-dir', type=str, default='./config',
-                       help='Configuration directory')
-    parser.add_argument('--profile', type=str,
-                       help='Profile to load')
-    parser.add_argument('--hot-reload', action='store_true',
-                       help='Enable configuration hot-reload')
+    parser.add_argument(
+        '--width', 
+        type=int, 
+        default=960,
+        help='Camera width'
+    )
     
-    # Performance options
-    parser.add_argument('--threading', action='store_true',
-                       help='Enable multi-threading')
-    parser.add_argument('--gpu', action='store_true',
-                       help='Enable GPU acceleration')
-    parser.add_argument('--adaptive', action='store_true',
-                       help='Enable adaptive quality')
-    
-    # Feature options
-    parser.add_argument('--custom-gestures', action='store_true',
-                       help='Enable custom gesture detection')
-    parser.add_argument('--model-path', type=str,
-                       help='Path to custom gesture model')
-    parser.add_argument('--voice-commands', action='store_true',
-                       help='Enable voice commands')
-    parser.add_argument('--system-tray', action='store_true',
-                       help='Run in system tray')
+    parser.add_argument(
+        '--height', 
+        type=int, 
+        default=540,
+        help='Camera height'
+    )
     
     # Debug options
-    parser.add_argument('--debug', action='store_true',
-                       help='Enable debug mode')
-    parser.add_argument('--verbose', action='store_true',
-                       help='Enable verbose logging')
+    parser.add_argument(
+        '--debug', 
+        action='store_true',
+        help='Enable debug mode'
+    )
     
-    args = parser.parse_args()
+    parser.add_argument(
+        '--no-preview', 
+        action='store_true',
+        help='Disable camera preview'
+    )
     
-    # Configure logging
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
+    return parser
+
+
+def detect_mode(config_path=None):
+    """
+    Auto-detect which mode to use based on configuration or available modules.
     
-    # Create and run application
-    app = HandToKeyApplication(args)
+    Args:
+        config_path: Optional path to a configuration file
+        
+    Returns:
+        String indicating the mode: "simple" or "modular"
+    """
+    # If config path is provided, check its format
+    if config_path and os.path.exists(config_path):
+        try:
+            from config.migration import detect_config_type
+            config_type = detect_config_type(config_path)
+            
+            if config_type == "simple":
+                return "simple"
+            elif config_type in ["modular_profile", "modular_settings"]:
+                return "modular"
+        except Exception as e:
+            logger.warning(f"Error detecting config type: {e}")
+    
+    # Check for presence of key modules
+    try:
+        # Try to import a key module from the modular implementation
+        from gestures.detector import StandardGestureDetector
+        from config.manager import ConfigurationManager
+        return "modular"
+    except ImportError:
+        # If that fails, check for the simple implementation
+        try:
+            import simple_implementation
+            return "simple"
+        except ImportError:
+            # Default to modular if both are available
+            return "modular"
+
+
+def run_simple_mode(args):
+    """
+    Run the application in simple mode.
+    
+    Args:
+        args: Command line arguments
+    """
+    from simple_implementation.main import main as simple_main
+    
+    # Prepare arguments for simple implementation
+    simple_args = {
+        "config": args.config,
+        "camera": args.camera,
+        "width": args.width,
+        "height": args.height,
+        "debug": args.debug,
+        "no_preview": args.no_preview
+    }
+    
+    # Run simple implementation
+    simple_main(**simple_args)
+
+
+def run_modular_mode(args):
+    """
+    Run the application in modular mode.
+    
+    Args:
+        args: Command line arguments
+    """
+    from gestures.detector import StandardGestureDetector
+    from input.handler import UnifiedInputHandler
+    from config.manager import ConfigurationManager
+    from camera.capture import CameraCapture
+    from ui.preview import PreviewWindow
+    
+    # Initialize configuration
+    config_manager = ConfigurationManager()
+    
+    # Handle migration if requested
+    if args.migrate and args.config:
+        from config.migration import ConfigMigration
+        success, message = ConfigMigration.migrate_simple_to_modular(
+            args.config,
+            config_manager
+        )
+        logger.info(message)
+        if not success:
+            return
+    
+    # Handle bulk migration if requested
+    if args.migrate_dir:
+        from config.migration import migrate_all_configs
+        results = migrate_all_configs(args.migrate_dir, config_manager)
+        for file_path, status in results.items():
+            logger.info(f"{file_path}: {status}")
+    
+    # Load configuration if provided
+    if args.config:
+        config_manager.load_config(args.config)
+    
+    # Activate profile if specified
+    if args.profile:
+        config_manager.activate_profile(args.profile)
+    elif not config_manager.active_profile:
+        # Activate default profile if none is active
+        profiles = config_manager.get_all_profiles()
+        if profiles:
+            config_manager.activate_profile(profiles[0])
+        else:
+            # Create and activate a default profile
+            config_manager.create_default_profiles()
+            config_manager.activate_profile("Gaming")
+    
+    # Override settings from command line arguments
+    settings_override = {}
+    if args.camera is not None:
+        settings_override["camera_index"] = args.camera
+    if args.width is not None:
+        settings_override["camera_width"] = args.width
+    if args.height is not None:
+        settings_override["camera_height"] = args.height
+    if args.debug:
+        settings_override["show_debug_info"] = True
+    if args.no_preview:
+        settings_override["show_preview"] = False
+    
+    if settings_override:
+        config_manager.update_settings(settings_override)
+    
+    # Initialize components
+    settings = config_manager.settings
+    
+    # Initialize camera
+    camera = CameraCapture(
+        camera_index=settings.camera_index,
+        width=settings.camera_width,
+        height=settings.camera_height,
+        fps=settings.camera_fps
+    )
+    
+    # Initialize gesture detector
+    detector = StandardGestureDetector(
+        min_detection_confidence=settings.min_detection_confidence,
+        min_tracking_confidence=settings.min_tracking_confidence,
+        enable_multi_hand=settings.enable_multi_hand,
+        max_hands=settings.max_hands
+    )
+    
+    # Initialize input handler
+    input_handler = UnifiedInputHandler()
+    
+    # Load gesture mappings
+    for gesture, mapping in config_manager.gesture_mappings.items():
+        input_handler.bind_gesture(
+            gesture,
+            {
+                "key": lambda m: input_handler.keyboard_handler.execute({
+                    "input_type": "key_press",
+                    "target": m.target,
+                    "mode": m.mode,
+                    "duration": m.duration
+                }),
+                "mouse": lambda m: input_handler.mouse_handler.execute({
+                    "input_type": "mouse_click" if "click" in m.target else "mouse_move",
+                    "target": m.target,
+                    "mode": m.mode,
+                    "duration": m.duration
+                }),
+                "gamepad": lambda m: input_handler.gamepad_handler.execute({
+                    "input_type": "gamepad_button" if not any(x in m.target for x in ["axis", "stick"]) else "gamepad_axis",
+                    "target": m.target,
+                    "mode": m.mode,
+                    "duration": m.duration
+                }),
+                "macro": lambda m: input_handler.execute_sequence(
+                    input_handler.macros.get(m.target)
+                )
+            }[mapping.action_type](mapping)
+        )
+    
+    # Initialize UI if preview is enabled
+    preview = None
+    if settings.show_preview:
+        preview = PreviewWindow(
+            width=settings.camera_width,
+            height=settings.camera_height,
+            show_stats=settings.show_statistics,
+            show_debug=settings.show_debug_info
+        )
+    
+    # Start components
+    camera.start()
+    input_handler.start()
+    config_manager.start_hot_reload()
     
     try:
-        app.run()
+        # Main loop
+        last_detection_time = 0
+        cooldown = 0.7  # Default cooldown between gestures
+        
+        while True:
+            # Get frame from camera
+            success, frame = camera.read()
+            if not success:
+                logger.warning("Failed to read frame from camera")
+                time.sleep(0.1)
+                continue
+            
+            # Process frame with gesture detector
+            results = detector.process(frame)
+            
+            # Handle detected gestures
+            if results.multi_hand_landmarks:
+                for hand_landmarks in results.multi_hand_landmarks:
+                    # Detect gestures
+                    gestures = detector.detect(hand_landmarks.landmark)
+                    
+                    # Execute mapped actions if cooldown has passed
+                    current_time = time.time()
+                    if current_time - last_detection_time > cooldown and gestures:
+                        for gesture in gestures:
+                            gesture_name = gesture.name.lower()
+                            if input_handler.execute_gesture(gesture_name):
+                                last_detection_time = current_time
+                                logger.info(f"Executed gesture: {gesture_name}")
+                                break
+            
+            # Update preview if enabled
+            if preview:
+                # Draw landmarks on frame
+                if results.multi_hand_landmarks:
+                    for hand_landmarks in results.multi_hand_landmarks:
+                        detector.draw_landmarks(frame, hand_landmarks)
+                
+                # Add debug info if enabled
+                if settings.show_debug_info:
+                    # Add FPS, active profile, etc.
+                    fps = camera.get_fps()
+                    profile_name = config_manager.active_profile.name if config_manager.active_profile else "None"
+                    
+                    debug_text = [
+                        f"FPS: {fps:.1f}",
+                        f"Profile: {profile_name}",
+                        f"Gestures: {len(config_manager.gesture_mappings)}",
+                        f"Last: {time.time() - last_detection_time:.1f}s ago"
+                    ]
+                    
+                    y = 30
+                    for text in debug_text:
+                        preview.add_text(frame, text, (10, y))
+                        y += 30
+                
+                # Update preview window
+                preview.update(frame)
+                
+                # Check for exit
+                if preview.should_exit():
+                    break
+            
+            # Sleep to control frame rate
+            if settings.frame_skip > 0:
+                time.sleep(settings.frame_skip / 1000.0)
+    
+    except KeyboardInterrupt:
+        logger.info("Application interrupted by user")
     except Exception as e:
-        logger.error(f"Application error: {e}")
-        sys.exit(1)
+        logger.error(f"Error in main loop: {e}", exc_info=True)
+    finally:
+        # Clean up
+        camera.stop()
+        input_handler.stop()
+        config_manager.stop_hot_reload()
+        if preview:
+            preview.close()
+        
+        logger.info("Application stopped")
+
+
+def main():
+    """Main entry point for the application."""
+    parser = setup_argument_parser()
+    args = parser.parse_args()
+    
+    # Set up logging level
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+    
+    # Determine which mode to use
+    mode = args.mode
+    if mode == 'auto':
+        mode = detect_mode(args.config)
+    
+    logger.info(f"Starting application in {mode} mode")
+    
+    # Run in the selected mode
+    if mode == 'simple':
+        run_simple_mode(args)
+    else:
+        run_modular_mode(args)
 
 
 if __name__ == "__main__":
     main()
+

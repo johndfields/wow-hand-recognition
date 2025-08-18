@@ -1,42 +1,9 @@
-# Core dependencies
-mediapipe>=0.10.0,<0.12.0
-opencv-python>=4.8.0
+opencv-python>=4.5.0
+mediapipe>=0.8.9
+numpy>=1.19.0
 pynput>=1.7.0
-numpy>=1.24.0
+vgamepad>=0.0.8; platform_system == "Windows"
+jsonschema>=3.2.0
+watchdog>=2.1.0
+PyYAML>=6.0
 
-# Configuration and validation
-jsonschema>=4.0.0
-pyyaml>=6.0
-watchdog>=3.0.0  # For hot-reload
-
-# Optional dependencies for full features
-# Uncomment as needed:
-
-# Virtual gamepad support (Windows)
-# vgamepad>=0.0.12  # Windows only
-
-# Audio feedback
-# pygame>=2.5.0  # For audio playback
-# simpleaudio>=1.0.4  # Alternative audio library
-
-# Voice commands
-# SpeechRecognition>=3.10.0
-# pyaudio>=0.2.11  # For microphone access
-
-# System tray (cross-platform)
-# pystray>=0.19.0
-# Pillow>=10.0.0  # For tray icons
-
-# GUI configuration tool
-# PyQt6>=6.5.0  # or tkinter (included with Python)
-# PySide6>=6.5.0  # Alternative to PyQt
-
-# Performance monitoring
-# psutil>=5.9.0
-
-# Development dependencies
-pytest>=7.4.0
-pytest-cov>=4.1.0
-black>=23.0.0
-pylint>=3.0.0
-mypy>=1.5.0

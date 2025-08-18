@@ -19,28 +19,45 @@ logger = logging.getLogger(__name__)
 
 class GestureType(Enum):
     """Enumeration of supported gesture types."""
+    # Basic gestures from both implementations
     OPEN_PALM = "open_palm"
     FIST = "fist"
-    VICTORY = "victory"
-    THREE = "three"
-    INDEX_ONLY = "index_only"
     THUMBS_UP = "thumbs_up"
+    
+    # Finger counting gestures
+    INDEX_ONLY = "index_only"  # Same as ONE_FINGER in simple implementation
+    ONE_FINGER = "one_finger"  # Alias for INDEX_ONLY
+    VICTORY = "victory"        # Same as TWO_FINGERS in simple implementation
+    TWO_FINGERS = "two_fingers"  # Alias for VICTORY
+    THREE = "three"            # Same as THREE_FINGERS in simple implementation
+    THREE_FINGERS = "three_fingers"  # Alias for THREE
+    FOUR_FINGERS = "four_fingers"  # Only in simple implementation
+    
+    # Pinch gestures
     PINCH_INDEX = "pinch_index"
     PINCH_MIDDLE = "pinch_middle"
     PINCH_RING = "pinch_ring"
     PINCH_PINKY = "pinch_pinky"
-    CUSTOM = "custom"
     
-    # New gestures
-    PEACE_SIGN = "peace_sign"
+    # Special gestures from simple implementation
+    L_SHAPE = "l_shape"
+    HANG_LOOSE = "hang_loose"  # Shaka gesture
+    
+    # Special gestures from modular implementation
     OK_SIGN = "ok_sign"
     ROCK_ON = "rock_on"
-    POINT = "point"
-    GRAB = "grab"
+    PEACE_SIGN = "peace_sign"  # Alternative name for VICTORY
+    POINT = "point"            # Alternative name for INDEX_ONLY
+    GRAB = "grab"              # Alternative name for FIST
+    
+    # Motion gestures
     SWIPE_LEFT = "swipe_left"
     SWIPE_RIGHT = "swipe_right"
     SWIPE_UP = "swipe_up"
     SWIPE_DOWN = "swipe_down"
+    
+    # Custom gesture support
+    CUSTOM = "custom"
 
 
 @dataclass
@@ -98,34 +115,53 @@ class StandardGestureDetector(GestureDetectorBase):
         """Detect all applicable gestures from hand landmarks."""
         gestures = set()
         
+        # Check pinch gestures first (they take priority)
+        pinch_detected = False
+        if self._is_pinch(landmarks, 8):
+            gestures.add(GestureType.PINCH_INDEX)
+            pinch_detected = True
+        if self._is_pinch(landmarks, 12):
+            gestures.add(GestureType.PINCH_MIDDLE)
+            pinch_detected = True
+        if self._is_pinch(landmarks, 16):
+            gestures.add(GestureType.PINCH_RING)
+            pinch_detected = True
+        if self._is_pinch(landmarks, 20):
+            gestures.add(GestureType.PINCH_PINKY)
+            pinch_detected = True
+            
+        # If pinch is detected, don't check other gestures to avoid conflicts
+        if pinch_detected:
+            return gestures
+        
         # Basic gesture detection
         if self._is_open_palm(landmarks):
             gestures.add(GestureType.OPEN_PALM)
-        if self._is_fist(landmarks):
+        elif self._is_fist(landmarks):
             gestures.add(GestureType.FIST)
-        if self._is_victory(landmarks):
+            gestures.add(GestureType.GRAB)  # Alias for FIST
+        elif self._is_victory(landmarks):
             gestures.add(GestureType.VICTORY)
-        if self._is_three_fingers(landmarks):
+            gestures.add(GestureType.TWO_FINGERS)  # Alias
+            gestures.add(GestureType.PEACE_SIGN)   # Alias
+        elif self._is_three_fingers(landmarks):
             gestures.add(GestureType.THREE)
-        if self._is_index_only(landmarks):
+            gestures.add(GestureType.THREE_FINGERS)  # Alias
+        elif self._is_four_fingers(landmarks):
+            gestures.add(GestureType.FOUR_FINGERS)
+        elif self._is_index_only(landmarks):
             gestures.add(GestureType.INDEX_ONLY)
-        if self._is_thumbs_up(landmarks):
+            gestures.add(GestureType.ONE_FINGER)  # Alias
+            gestures.add(GestureType.POINT)       # Alias
+        elif self._is_thumbs_up(landmarks):
             gestures.add(GestureType.THUMBS_UP)
-            
-        # Pinch gestures
-        if self._is_pinch(landmarks, 8):
-            gestures.add(GestureType.PINCH_INDEX)
-        if self._is_pinch(landmarks, 12):
-            gestures.add(GestureType.PINCH_MIDDLE)
-        if self._is_pinch(landmarks, 16):
-            gestures.add(GestureType.PINCH_RING)
-        if self._is_pinch(landmarks, 20):
-            gestures.add(GestureType.PINCH_PINKY)
-            
-        # Advanced gestures
-        if self._is_ok_sign(landmarks):
+        elif self._is_l_shape(landmarks):
+            gestures.add(GestureType.L_SHAPE)
+        elif self._is_hang_loose(landmarks):
+            gestures.add(GestureType.HANG_LOOSE)
+        elif self._is_ok_sign(landmarks):
             gestures.add(GestureType.OK_SIGN)
-        if self._is_rock_on(landmarks):
+        elif self._is_rock_on(landmarks):
             gestures.add(GestureType.ROCK_ON)
             
         # Motion gestures
@@ -141,9 +177,30 @@ class StandardGestureDetector(GestureDetectorBase):
         confidence_map = {
             GestureType.OPEN_PALM: self._get_open_palm_confidence,
             GestureType.FIST: self._get_fist_confidence,
+            GestureType.GRAB: self._get_fist_confidence,  # Alias for FIST
             GestureType.VICTORY: self._get_victory_confidence,
+            GestureType.TWO_FINGERS: self._get_victory_confidence,  # Alias
+            GestureType.PEACE_SIGN: self._get_victory_confidence,  # Alias
+            GestureType.THREE: self._get_three_fingers_confidence,
+            GestureType.THREE_FINGERS: self._get_three_fingers_confidence,  # Alias
+            GestureType.FOUR_FINGERS: self._get_four_fingers_confidence,
+            GestureType.INDEX_ONLY: self._get_index_only_confidence,
+            GestureType.ONE_FINGER: self._get_index_only_confidence,  # Alias
+            GestureType.POINT: self._get_index_only_confidence,  # Alias
             GestureType.THUMBS_UP: self._get_thumbs_up_confidence,
-            # Add more confidence calculators
+            GestureType.L_SHAPE: self._get_l_shape_confidence,
+            GestureType.HANG_LOOSE: self._get_hang_loose_confidence,
+            GestureType.OK_SIGN: self._get_ok_sign_confidence,
+            GestureType.ROCK_ON: self._get_rock_on_confidence,
+            GestureType.PINCH_INDEX: lambda lm: self._get_pinch_confidence(lm, 8),
+            GestureType.PINCH_MIDDLE: lambda lm: self._get_pinch_confidence(lm, 12),
+            GestureType.PINCH_RING: lambda lm: self._get_pinch_confidence(lm, 16),
+            GestureType.PINCH_PINKY: lambda lm: self._get_pinch_confidence(lm, 20),
+            # Motion gestures
+            GestureType.SWIPE_LEFT: self._get_swipe_confidence,
+            GestureType.SWIPE_RIGHT: self._get_swipe_confidence,
+            GestureType.SWIPE_UP: self._get_swipe_confidence,
+            GestureType.SWIPE_DOWN: self._get_swipe_confidence,
         }
         
         calculator = confidence_map.get(gesture_type)
@@ -245,6 +302,49 @@ class StandardGestureDetector(GestureDetectorBase):
                 not self._finger_extended(landmarks, 12, 10) and
                 not self._finger_extended(landmarks, 16, 14) and
                 self._finger_extended(landmarks, 20, 18))
+                
+    def _is_four_fingers(self, landmarks: List[Any]) -> bool:
+        """Detect four fingers up (index, middle, ring, pinky - no thumb)."""
+        return (self._finger_extended(landmarks, 8, 6) and 
+                self._finger_extended(landmarks, 12, 10) and
+                self._finger_extended(landmarks, 16, 14) and
+                self._finger_extended(landmarks, 20, 18) and
+                not self._thumb_extended(landmarks))
+    
+    def _is_l_shape(self, landmarks: List[Any]) -> bool:
+        """Detect L shape gesture (thumb out, index up, others closed)."""
+        # Thumb should be extended to the side
+        thumb_extended = self._thumb_extended(landmarks)
+        # Index finger should be extended up
+        index_extended = self._finger_extended(landmarks, 8, 6)
+        # Other fingers should be closed
+        middle_closed = not self._finger_extended(landmarks, 12, 10)
+        ring_closed = not self._finger_extended(landmarks, 16, 14)
+        pinky_closed = not self._finger_extended(landmarks, 20, 18)
+        
+        # Check if thumb is roughly perpendicular to index (L shape)
+        if thumb_extended and index_extended and middle_closed and ring_closed and pinky_closed:
+            # Additional check: thumb tip should be away from index
+            thumb_tip = landmarks[4]
+            index_base = landmarks[5]
+            distance = self._l2_distance(thumb_tip, index_base)
+            diag = self._bbox_diag(landmarks)
+            return distance > 0.15 * diag  # Thumb is extended away
+        return False
+    
+    def _is_hang_loose(self, landmarks: List[Any]) -> bool:
+        """Detect hang loose/shaka gesture (thumb and pinky extended, others closed)."""
+        # Thumb should be extended
+        thumb_extended = self._thumb_extended(landmarks)
+        # Pinky should be extended
+        pinky_extended = self._finger_extended(landmarks, 20, 18)
+        # Other fingers should be closed
+        index_closed = not self._finger_extended(landmarks, 8, 6)
+        middle_closed = not self._finger_extended(landmarks, 12, 10)
+        ring_closed = not self._finger_extended(landmarks, 16, 14)
+        
+        return (thumb_extended and pinky_extended and 
+                index_closed and middle_closed and ring_closed)
     
     def _detect_motion_gesture(self, landmarks: List[Any]) -> Optional[GestureType]:
         """Detect motion-based gestures like swipes."""
@@ -326,6 +426,128 @@ class StandardGestureDetector(GestureDetectorBase):
         ]) / 4.0
         
         return (thumb_extended * 0.5 + fingers_curled * 0.5)
+    
+    def _get_three_fingers_confidence(self, landmarks: List[Any]) -> float:
+        """Calculate confidence for three fingers gesture."""
+        index_extended = self._finger_extended(landmarks, 8, 6)
+        middle_extended = self._finger_extended(landmarks, 12, 10)
+        ring_extended = self._finger_extended(landmarks, 16, 14)
+        pinky_curled = not self._finger_extended(landmarks, 20, 18)
+        
+        score = 0.0
+        if index_extended: score += 0.25
+        if middle_extended: score += 0.25
+        if ring_extended: score += 0.25
+        if pinky_curled: score += 0.25
+        
+        return score
+    
+    def _get_four_fingers_confidence(self, landmarks: List[Any]) -> float:
+        """Calculate confidence for four fingers gesture."""
+        index_extended = self._finger_extended(landmarks, 8, 6)
+        middle_extended = self._finger_extended(landmarks, 12, 10)
+        ring_extended = self._finger_extended(landmarks, 16, 14)
+        pinky_extended = self._finger_extended(landmarks, 20, 18)
+        thumb_curled = not self._thumb_extended(landmarks)
+        
+        score = 0.0
+        if index_extended: score += 0.2
+        if middle_extended: score += 0.2
+        if ring_extended: score += 0.2
+        if pinky_extended: score += 0.2
+        if thumb_curled: score += 0.2
+        
+        return score
+    
+    def _get_index_only_confidence(self, landmarks: List[Any]) -> float:
+        """Calculate confidence for index only gesture."""
+        index_extended = self._finger_extended(landmarks, 8, 6)
+        other_fingers_curled = sum([
+            not self._finger_extended(landmarks, 12, 10),
+            not self._finger_extended(landmarks, 16, 14),
+            not self._finger_extended(landmarks, 20, 18),
+            not self._thumb_extended(landmarks)
+        ]) / 4.0
+        
+        return (index_extended * 0.5 + other_fingers_curled * 0.5)
+    
+    def _get_l_shape_confidence(self, landmarks: List[Any]) -> float:
+        """Calculate confidence for L shape gesture."""
+        thumb_extended = self._thumb_extended(landmarks)
+        index_extended = self._finger_extended(landmarks, 8, 6)
+        other_fingers_curled = sum([
+            not self._finger_extended(landmarks, 12, 10),
+            not self._finger_extended(landmarks, 16, 14),
+            not self._finger_extended(landmarks, 20, 18)
+        ]) / 3.0
+        
+        # Check thumb-index perpendicularity
+        thumb_tip = landmarks[4]
+        index_base = landmarks[5]
+        distance = self._l2_distance(thumb_tip, index_base)
+        diag = self._bbox_diag(landmarks)
+        perpendicular_score = min(1.0, distance / (0.15 * diag))
+        
+        return (thumb_extended * 0.25 + index_extended * 0.25 + 
+                other_fingers_curled * 0.25 + perpendicular_score * 0.25)
+    
+    def _get_hang_loose_confidence(self, landmarks: List[Any]) -> float:
+        """Calculate confidence for hang loose gesture."""
+        thumb_extended = self._thumb_extended(landmarks)
+        pinky_extended = self._finger_extended(landmarks, 20, 18)
+        other_fingers_curled = sum([
+            not self._finger_extended(landmarks, 8, 6),
+            not self._finger_extended(landmarks, 12, 10),
+            not self._finger_extended(landmarks, 16, 14)
+        ]) / 3.0
+        
+        return (thumb_extended * 0.33 + pinky_extended * 0.33 + 
+                other_fingers_curled * 0.34)
+    
+    def _get_ok_sign_confidence(self, landmarks: List[Any]) -> float:
+        """Calculate confidence for OK sign gesture."""
+        pinch_score = 1.0 - min(1.0, self._l2_distance(landmarks[4], landmarks[8]) / 
+                               (0.08 * self._bbox_diag(landmarks)))
+        other_fingers_extended = sum([
+            self._finger_extended(landmarks, 12, 10),
+            self._finger_extended(landmarks, 16, 14),
+            self._finger_extended(landmarks, 20, 18)
+        ]) / 3.0
+        
+        return (pinch_score * 0.6 + other_fingers_extended * 0.4)
+    
+    def _get_rock_on_confidence(self, landmarks: List[Any]) -> float:
+        """Calculate confidence for rock on gesture."""
+        index_extended = self._finger_extended(landmarks, 8, 6)
+        pinky_extended = self._finger_extended(landmarks, 20, 18)
+        other_fingers_curled = sum([
+            not self._finger_extended(landmarks, 12, 10),
+            not self._finger_extended(landmarks, 16, 14),
+            not self._thumb_extended(landmarks)
+        ]) / 3.0
+        
+        return (index_extended * 0.33 + pinky_extended * 0.33 + 
+                other_fingers_curled * 0.34)
+    
+    def _get_pinch_confidence(self, landmarks: List[Any], tip_idx: int) -> float:
+        """Calculate confidence for pinch gesture with specific finger."""
+        d = self._l2_distance(landmarks[4], landmarks[tip_idx])
+        diag = self._bbox_diag(landmarks) + 1e-6
+        ratio = d / (0.08 * self.sensitivity * diag)
+        return max(0.0, min(1.0, 1.0 - ratio))
+    
+    def _get_swipe_confidence(self, landmarks: List[Any]) -> float:
+        """Calculate confidence for swipe gestures."""
+        if len(self.motion_history) < 10:
+            return 0.0
+            
+        start_pos = self.motion_history[0]
+        current_pos = self.motion_history[-1]
+        dx = current_pos[0] - start_pos[0]
+        dy = current_pos[1] - start_pos[1]
+        
+        motion_magnitude = np.hypot(dx, dy)
+        return min(1.0, motion_magnitude / 0.3)
 
 
 class CustomGestureDetector(GestureDetectorBase):

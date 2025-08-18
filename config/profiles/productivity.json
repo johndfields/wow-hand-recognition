@@ -1,0 +1,96 @@
+{
+  "name": "Productivity",
+  "description": "Optimized for productivity with shortcuts and navigation",
+  "gesture_mappings": [
+    {
+      "gesture": "swipe_left",
+      "action_type": "key",
+      "target": "alt+left",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "swipe_right",
+      "action_type": "key",
+      "target": "alt+right",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "swipe_up",
+      "action_type": "key",
+      "target": "page_up",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "swipe_down",
+      "action_type": "key",
+      "target": "page_down",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_index",
+      "action_type": "key",
+      "target": "ctrl+c",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_middle",
+      "action_type": "key",
+      "target": "ctrl+v",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_ring",
+      "action_type": "key",
+      "target": "ctrl+z",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_pinky",
+      "action_type": "key",
+      "target": "ctrl+y",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "open_palm",
+      "action_type": "key",
+      "target": "ctrl+s",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "fist",
+      "action_type": "key",
+      "target": "escape",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "index_only",
+      "action_type": "mouse",
+      "target": "left_click",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "victory",
+      "action_type": "mouse",
+      "target": "double_click",
+      "mode": "tap",
+      "enabled": true
+    }
+  ],
+  "settings": {
+    "gesture_sensitivity": 1.0,
+    "stable_frames": 3
+  },
+  "is_active": false
+}
+

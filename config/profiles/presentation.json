@@ -1,0 +1,78 @@
+{
+  "name": "Presentation",
+  "description": "Optimized for presentations with slide navigation",
+  "gesture_mappings": [
+    {
+      "gesture": "swipe_left",
+      "action_type": "key",
+      "target": "left",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "swipe_right",
+      "action_type": "key",
+      "target": "right",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "open_palm",
+      "action_type": "key",
+      "target": "f5",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "fist",
+      "action_type": "key",
+      "target": "escape",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "index_only",
+      "action_type": "mouse",
+      "target": "left_click",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "victory",
+      "action_type": "key",
+      "target": "b",
+      "mode": "tap",
+      "enabled": true,
+      "metadata": {
+        "description": "Blank screen in presentation mode"
+      }
+    },
+    {
+      "gesture": "thumbs_up",
+      "action_type": "key",
+      "target": "home",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_index",
+      "action_type": "key",
+      "target": "1",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_middle",
+      "action_type": "key",
+      "target": "2",
+      "mode": "tap",
+      "enabled": true
+    }
+  ],
+  "settings": {
+    "gesture_sensitivity": 0.8,
+    "stable_frames": 4
+  },
+  "is_active": false
+}
+

@@ -1,0 +1,82 @@
+{
+  "name": "Gaming",
+  "description": "Optimized for gaming with WASD movement and action keys",
+  "gesture_mappings": [
+    {
+      "gesture": "open_palm",
+      "action_type": "key",
+      "target": "w",
+      "mode": "hold",
+      "enabled": true
+    },
+    {
+      "gesture": "fist",
+      "action_type": "key",
+      "target": "s",
+      "mode": "hold",
+      "enabled": true
+    },
+    {
+      "gesture": "victory",
+      "action_type": "key",
+      "target": "a",
+      "mode": "hold",
+      "enabled": true
+    },
+    {
+      "gesture": "three",
+      "action_type": "key",
+      "target": "d",
+      "mode": "hold",
+      "enabled": true
+    },
+    {
+      "gesture": "thumbs_up",
+      "action_type": "key",
+      "target": "space",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_index",
+      "action_type": "key",
+      "target": "1",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_middle",
+      "action_type": "key",
+      "target": "2",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_ring",
+      "action_type": "key",
+      "target": "3",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "pinch_pinky",
+      "action_type": "key",
+      "target": "4",
+      "mode": "tap",
+      "enabled": true
+    },
+    {
+      "gesture": "index_only",
+      "action_type": "mouse",
+      "target": "right_click",
+      "mode": "tap",
+      "enabled": true
+    }
+  ],
+  "settings": {
+    "gesture_sensitivity": 1.2,
+    "stable_frames": 2
+  },
+  "is_active": true
+}
+

@@ -1,349 +1,215 @@
-# Hand to Key - Advanced Hand Gesture Control System
+# Hand Gesture Recognition for Input Control
 
-Transform hand gestures into keyboard inputs, mouse actions, and gamepad controls using computer vision and machine learning.
+A computer vision-based application that recognizes hand gestures and translates them into keyboard, mouse, and gamepad inputs. This allows for hands-free control of games, presentations, and other applications.
 
-## 🌟 Features
+## Features
 
-### Core Functionality
-- **Multi-Gesture Recognition**: 20+ built-in gestures including pinches, swipes, and custom gestures
-- **Universal Input Support**: Keyboard, mouse, gamepad, and macro controls
-- **Real-time Performance**: Optimized with threading, GPU acceleration, and adaptive quality
-- **Profile System**: Multiple profiles for gaming, productivity, presentations, etc.
-- **Hot-Reload Configuration**: Change settings without restarting
+- **Real-time Hand Gesture Detection**: Recognizes a wide variety of hand gestures including:
+  - Basic gestures (open palm, fist, thumbs up)
+  - Finger counting (one to four fingers)
+  - Special gestures (L-shape, hang loose/shaka, OK sign, rock on)
+  - Pinch gestures (with each finger)
+  - Motion gestures (swipes in different directions)
 
-### Enhanced Features
-- **🎮 Gaming Mode**: WASD movement, action keys, mouse controls
-- **🎯 Calibration Mode**: Personalize gesture sensitivity
-- **🎤 Voice Commands**: Control via voice (optional)
-- **📊 Statistics Tracking**: Performance metrics and success rates
-- **🔊 Audio Feedback**: Sound effects for gestures
-- **♿ Accessibility**: High contrast, large text, enhanced sensitivity
-- **💾 Crash Recovery**: Automatic state restoration
-- **🎬 Macro Recording**: Record and replay input sequences
-- **🌐 Multi-Language**: Gesture combinations and custom mappings
+- **Flexible Input Mapping**:
+  - Map gestures to keyboard keys, key combinations, and special keys
+  - Map gestures to mouse movements and clicks
+  - Map gestures to gamepad buttons and analog sticks
+  - Create and execute complex macro sequences
 
-## 📋 Requirements
+- **Cross-Platform Compatibility**:
+  - Windows, macOS, and Linux support
+  - Special optimizations for Mac-to-Windows VM environments (Parallels)
+  - Platform-specific input adapters for consistent behavior
 
-- Python 3.8+
-- Webcam
-- macOS, Windows, or Linux
+- **Configuration System**:
+  - Profile-based configuration with inheritance
+  - JSON schema validation
+  - Hot-reload capability
+  - Migration utilities for different configuration formats
 
-## 🚀 Quick Start
+- **Performance Optimizations**:
+  - Multi-threaded processing
+  - GPU acceleration support
+  - Adaptive quality settings
+  - Frame skipping options
 
-### Installation
+- **User Interface**:
+  - Real-time camera preview with hand landmark visualization
+  - Performance statistics display
+  - Debug information overlay
+  - Customizable UI settings
+
+## Requirements
+
+- Python 3.7+
+- OpenCV
+- MediaPipe
+- NumPy
+- pynput (for input control)
+- vgamepad (for gamepad emulation)
+- jsonschema (for configuration validation)
+- watchdog (for configuration hot-reload)
+
+## Installation
 
 1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/hand_to_key.git
-cd hand_to_key
-```
+   ```
+   git clone https://github.com/yourusername/hand-gesture-recognition.git
+   cd hand-gesture-recognition
+   ```
 
-2. Create virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+2. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
 
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+3. Run the application:
+   ```
+   python src/main.py
+   ```
+
+## Usage
 
 ### Basic Usage
 
-Run with default settings:
-```bash
+Run the application with default settings:
+```
 python src/main.py
 ```
 
-Run with enhanced features:
-```bash
-python src/main.py --threading --adaptive --hot-reload
+### Command Line Options
+
+```
+python src/main.py --help
 ```
 
-## 🎮 Gesture Mappings
-
-### Default Gestures
-
-| Gesture | Default Action | Mode |
-|---------|---------------|------|
-| Open Palm | W (forward) | Hold |
-| Fist | S (backward) | Hold |
-| L Shape | A (left) | Hold |
-| Hang Loose (🤙) | D (right) | Hold |
-| Index Only | Right Click | Tap |
-| Thumbs Up | Tab | Tap |
-| Pinch Index | 1 | Tap |
-| Pinch Middle | 2 | Tap |
-| Pinch Ring | 3 | Tap |
-| Pinch Pinky | 4 | Tap |
-
-### Motion Gestures
-
-| Gesture | Action | Detection |
-|---------|--------|-----------|
-| Swipe Left | Alt+Left | Motion |
-| Swipe Right | Alt+Right | Motion |
-| Swipe Up | Page Up | Motion |
-| Swipe Down | Page Down | Motion |
-
-## ⚙️ Configuration
-
-### Command Line Arguments
-
-```bash
-python src/main.py [options]
-```
-
-**Camera Options:**
-- `--camera INDEX`: Camera index (default: 0)
-- `--auto-camera`: Auto-select best camera
-
-**Configuration Options:**
-- `--config-dir PATH`: Configuration directory
-- `--profile NAME`: Load specific profile
-- `--hot-reload`: Enable configuration hot-reload
-
-**Performance Options:**
-- `--threading`: Enable multi-threading
-- `--gpu`: Enable GPU acceleration
-- `--adaptive`: Enable adaptive quality
-
-**Feature Options:**
-- `--custom-gestures`: Enable custom gesture detection
-- `--model-path PATH`: Path to custom gesture model
-- `--voice-commands`: Enable voice commands
-- `--system-tray`: Run in system tray
-
-**Debug Options:**
+Common options:
+- `--mode [simple|modular|auto]`: Select application mode
+- `--config PATH`: Path to configuration file
+- `--profile NAME`: Profile name to use (modular mode only)
+- `--camera INDEX`: Camera index to use
+- `--width WIDTH`: Camera width
+- `--height HEIGHT`: Camera height
 - `--debug`: Enable debug mode
-- `--verbose`: Enable verbose logging
+- `--no-preview`: Disable camera preview
 
-### Configuration Files
+### Configuration
 
-Configuration files are stored in `./config/`:
+The application supports two configuration formats:
 
-- `settings.json`: Global application settings
-- `profiles/`: Profile configurations
-  - `Gaming.json`: Gaming profile
-  - `Productivity.json`: Productivity profile
-  - `Presentation.json`: Presentation profile
+1. **Simple Format** (legacy):
+   ```json
+   {
+     "camera_index": 0,
+     "sensitivity": 1.0,
+     "cooldown": 0.7,
+     "mappings": {
+       "open_palm": {"action": "key", "target": "w", "mode": "hold"},
+       "fist": {"action": "key", "target": "s", "mode": "hold"}
+     }
+   }
+   ```
 
-### Creating Custom Profiles
+2. **Modular Format** (recommended):
+   ```json
+   {
+     "name": "Gaming",
+     "description": "Optimized for gaming with WASD movement",
+     "gesture_mappings": [
+       {
+         "gesture": "open_palm",
+         "action_type": "key",
+         "target": "w",
+         "mode": "hold"
+       },
+       {
+         "gesture": "fist",
+         "action_type": "key",
+         "target": "s",
+         "mode": "hold"
+       }
+     ],
+     "settings": {
+       "gesture_sensitivity": 1.2
+     }
+   }
+   ```
 
-1. Create new profile via code:
-```python
-config_manager.create_profile("MyProfile", "Description")
+### Migrating Configurations
+
+To migrate from simple to modular format:
+```
+python src/main.py --migrate --config simple_config.json
 ```
 
-2. Or copy and modify existing profile:
-```bash
-cp config/profiles/Gaming.json config/profiles/MyProfile.json
+To migrate all configurations in a directory:
+```
+python src/main.py --migrate-dir ./configs
 ```
 
-3. Edit the JSON file with your mappings:
-```json
-{
-  "name": "MyProfile",
-  "description": "Custom profile",
-  "gesture_mappings": [
-    {
-      "gesture": "open_palm",
-      "action_type": "key",
-      "target": "space",
-      "mode": "tap",
-      "enabled": true
-    }
-  ]
-}
-```
+## Supported Gestures
 
-## 🎯 Keyboard Shortcuts
+| Gesture | Description | Default Mapping |
+|---------|-------------|----------------|
+| `open_palm` | All fingers extended | W key (hold) |
+| `fist` | Closed hand | S key (hold) |
+| `thumbs_up` | Thumb extended, others closed | Space (tap) |
+| `index_only` | Index finger extended | Mouse right click |
+| `victory` | Index and middle fingers extended | A key (hold) |
+| `three` | Index, middle, and ring fingers extended | D key (hold) |
+| `four_fingers` | All fingers except thumb extended | None |
+| `pinch_index` | Thumb and index finger pinched | 1 key |
+| `pinch_middle` | Thumb and middle finger pinched | 2 key |
+| `pinch_ring` | Thumb and ring finger pinched | 3 key |
+| `pinch_pinky` | Thumb and pinky finger pinched | 4 key |
+| `l_shape` | Thumb and index forming L shape | None |
+| `hang_loose` | Thumb and pinky extended (shaka) | None |
+| `ok_sign` | Thumb and index forming circle | None |
+| `rock_on` | Index and pinky extended | None |
+| `swipe_left` | Hand moving left | Alt+Left |
+| `swipe_right` | Hand moving right | Alt+Right |
+| `swipe_up` | Hand moving up | Page Up |
+| `swipe_down` | Hand moving down | Page Down |
 
-While the application is running:
-
-| Key | Action |
-|-----|--------|
-| Q | Quit application |
-| P | Pause/Resume |
-| C | Start/Stop calibration |
-| R | Start/Stop macro recording |
-| S | Save settings |
-| H | Show help |
-| 1-9 | Switch profile by number |
-
-## 🔧 Advanced Features
-
-### Macro Recording
-
-1. Press `R` to start recording
-2. Perform your input sequence
-3. Press `R` again to stop and save
-
-### Calibration Mode
-
-1. Press `C` to enter calibration
-2. Perform each gesture when prompted
-3. System adjusts sensitivity automatically
-
-### Voice Commands
-
-Enable with `--voice-commands` flag:
-- "Pause" / "Resume"
-- "Switch profile [name]"
-- "Start calibration"
-- "Stop" / "Quit"
-
-### Custom Gestures
-
-Train custom gestures:
-```python
-from src.gestures.detector import CustomGestureDetector
-
-detector = CustomGestureDetector()
-detector.train_gesture("my_gesture", sample_landmarks)
-detector.save_model("models/my_gestures.pkl")
-```
-
-## 🛠️ Troubleshooting
-
-### Common Issues
-
-**Camera not detected:**
-- Try different camera index: `--camera 1`
-- Use auto-detection: `--auto-camera`
-- Check camera permissions
-
-**Low FPS / Lag:**
-- Enable threading: `--threading`
-- Enable adaptive quality: `--adaptive`
-- Reduce resolution in settings
-- Enable frame skip in config
-
-**Gestures not detected:**
-- Run calibration mode (press `C`)
-- Adjust lighting conditions
-- Ensure hand is fully visible
-- Increase gesture sensitivity in settings
-
-**Input not working:**
-- Check if application is paused (press `P`)
-- Verify profile is loaded correctly
-- Check gesture mappings in config
-- Run as administrator (Windows) for system-wide input
-
-### Performance Optimization
-
-1. **Enable Threading:**
-```bash
-python src/main.py --threading --adaptive
-```
-
-2. **Adjust Frame Skip:**
-Edit `config/settings.json`:
-```json
-{
-  "frame_skip": 2,
-  "processing_threads": 4
-}
-```
-
-3. **Lower Resolution:**
-```json
-{
-  "camera_width": 640,
-  "camera_height": 360
-}
-```
-
-## 🔐 Privacy & Security
-
-- **No Data Collection**: All processing is local
-- **Camera Indicator**: Visual indicator when camera is active
-- **Secure Configuration**: Sensitive mappings can be encrypted
-- **Action Logging**: Optional logging for audit trail
-
-## 🤝 Contributing
-
-Contributions are welcome! Areas for improvement:
-
-1. **Complete stub implementations** in `src/utils/stubs.py`
-2. **Add more gesture types**
-3. **Improve gesture detection algorithms**
-4. **Create GUI configuration tool**
-5. **Add more game-specific profiles**
-6. **Implement full voice command system**
-7. **Add gesture combination support**
-
-## 📝 License
-
-MIT License - See LICENSE file for details
-
-## 🙏 Acknowledgments
-
-- MediaPipe for hand tracking
-- OpenCV for image processing
-- pynput for input simulation
-
-## 📚 Architecture
+## Project Structure
 
 ```
-hand_to_key/
+hand-gesture-recognition/
 ├── src/
-│   ├── main.py              # Main application
 │   ├── gestures/
-│   │   └── detector.py      # Gesture detection engine
+│   │   ├── detector.py       # Gesture detection algorithms
+│   │   └── visualizer.py     # Visualization utilities
 │   ├── input/
-│   │   └── handler.py       # Input handling system
+│   │   ├── handler.py        # Input handling system
+│   │   └── platform_adapters.py # Platform-specific adapters
 │   ├── config/
-│   │   └── manager.py       # Configuration management
-│   └── utils/
-│       ├── camera.py        # Camera management
-│       └── stubs.py         # Placeholder implementations
-├── config/                  # Configuration files
-│   ├── profiles/           # Profile configurations
-│   └── settings.json       # Global settings
-└── requirements.txt        # Python dependencies
+│   │   ├── manager.py        # Configuration management
+│   │   └── migration.py      # Configuration migration utilities
+│   ├── camera/
+│   │   └── capture.py        # Camera capture module
+│   ├── ui/
+│   │   └── preview.py        # UI preview window
+│   ├── main.py               # Main application entry point
+│   └── simple_implementation/ # Legacy simple implementation
+├── config/
+│   ├── profiles/             # Configuration profiles
+│   └── macros/               # Macro definitions
+├── requirements.txt          # Python dependencies
+└── README.md                 # This file
 ```
 
-## 🚦 Status
+## Contributing
 
-**Current Version**: 2.0.0 (Enhanced)
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-**Implemented**:
-- ✅ Modular architecture
-- ✅ Configuration management
-- ✅ Performance optimizations
-- ✅ Enhanced user experience
-- ✅ Extended functionality
-- ✅ Robustness improvements
-- ✅ Accessibility features
-- ✅ Platform integration
-- ✅ Security features
+## License
 
-**Placeholder Implementations** (in `stubs.py`):
-- ⚠️ Audio feedback (basic logging)
-- ⚠️ Statistics tracking (basic counting)
-- ⚠️ Crash handler (basic error logging)
-- ⚠️ Overlay renderer (pass-through)
-- ⚠️ Calibration mode (basic recording)
-- ⚠️ Voice commands (stub listener)
-- ⚠️ System tray (stub app)
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 💡 Tips
+## Acknowledgments
 
-1. **For Gaming**: Use the Gaming profile with `--threading` for best performance
-2. **For Presentations**: Use Presentation profile with swipe gestures
-3. **For Accessibility**: Enable `--voice-commands` and accessibility mode
-4. **For Development**: Use `--debug --verbose` for detailed logging
+- [MediaPipe](https://mediapipe.dev/) for the hand tracking technology
+- [OpenCV](https://opencv.org/) for computer vision capabilities
+- [pynput](https://pynput.readthedocs.io/) for input control
 
-## 🐛 Known Limitations
-
-1. Voice commands require additional dependencies (see requirements.txt)
-2. Gamepad emulation only works on Windows with vgamepad
-3. Some gestures may conflict - use profiles to separate use cases
-4. Background subtraction works best with static backgrounds
-
----
-
-**Need Help?** Open an issue on GitHub or check the troubleshooting section above.

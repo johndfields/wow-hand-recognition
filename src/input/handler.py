@@ -92,8 +92,11 @@ class KeyboardHandler(InputHandlerBase):
         self.held_keys: Dict[str, bool] = {}
         self.toggle_states: Dict[str, bool] = {}
         self.combo_keys: Dict[str, List[Key]] = {}
-        self.key_mapping = self._create_key_mapping()
         self.lock = threading.Lock()
+        
+        # Initialize platform-specific adapter
+        from .platform_adapters import get_platform_adapter
+        self.platform_adapter = get_platform_adapter()
         
         # Macro recording
         self.is_recording = False
@@ -226,115 +229,16 @@ class KeyboardHandler(InputHandlerBase):
         return True
     
     def _parse_key(self, key_str: Union[str, Key]) -> Optional[Union[Key, 'KeyCode']]:
-        """Parse a key string to a Key object or KeyCode."""
-        if isinstance(key_str, Key):
-            return key_str
-        
-        key_str_original = str(key_str)
-        key_str_lower = key_str_original.lower()
-        
-        # Check special keys
-        if key_str_lower in self.key_mapping:
-            return self.key_mapping[key_str_lower]
-        
-        # Single character - use KeyCode for better cross-platform compatibility
-        if len(key_str_original) == 1:
-            # For digits, use enhanced handling for VM compatibility (e.g., Parallels)
-            if key_str_original.isdigit():
-                return self._create_digit_key(key_str_original)
-            else:
-                # For letters and other characters, use KeyCode.from_char
-                from pynput.keyboard import KeyCode
-                return KeyCode.from_char(key_str_original)
-        
-        # Function keys
-        if key_str_lower.startswith('f') and key_str_lower[1:].isdigit():
-            try:
-                return getattr(Key, key_str_lower)
-            except AttributeError:
-                pass
-        
-        return None
+        """Parse a key string to a Key object or KeyCode using platform adapter."""
+        return self.platform_adapter.parse_key(key_str)
     
     def _create_digit_key(self, digit: str):
         """Create a digit key with enhanced VM compatibility (e.g., for Parallels)."""
-        from pynput.keyboard import KeyCode
-        import platform
-        
-        # On Mac (which might be sending to VMs like Parallels), use virtual key codes for digits
-        if platform.system() == 'Darwin':
-            mac_digit_vk_codes = {
-                '0': 0x1D,  # kVK_ANSI_0
-                '1': 0x12,  # kVK_ANSI_1
-                '2': 0x13,  # kVK_ANSI_2
-                '3': 0x14,  # kVK_ANSI_3
-                '4': 0x15,  # kVK_ANSI_4
-                '5': 0x17,  # kVK_ANSI_5
-                '6': 0x16,  # kVK_ANSI_6
-                '7': 0x1A,  # kVK_ANSI_7
-                '8': 0x1C,  # kVK_ANSI_8
-                '9': 0x19   # kVK_ANSI_9
-            }
-            
-            if digit in mac_digit_vk_codes:
-                try:
-                    # Create KeyCode with both virtual key code and character for best compatibility
-                    return KeyCode.from_vk(mac_digit_vk_codes[digit], char=digit)
-                except Exception as e:
-                    logger.debug(f"VK approach failed for digit {digit}: {e}")
-        
-        # Fallback to character-based KeyCode
-        return KeyCode.from_char(digit)
+        return self.platform_adapter.create_digit_key(digit)
     
     def _parse_combo(self, combo_str: str) -> List[Key]:
         """Parse a key combination string."""
-        parts = [p.strip().lower() for p in combo_str.split('+')]
-        keys = []
-        
-        for part in parts:
-            key = self._parse_key(part)
-            if key:
-                keys.append(key)
-        
-        return keys
-    
-    def _create_key_mapping(self) -> Dict[str, Key]:
-        """Create mapping of string names to Key objects."""
-        mapping = {
-            'space': Key.space, 'enter': Key.enter, 'return': Key.enter,
-            'tab': Key.tab, 'esc': Key.esc, 'escape': Key.esc,
-            'up': Key.up, 'down': Key.down, 'left': Key.left, 'right': Key.right,
-            'backspace': Key.backspace, 'delete': Key.delete,
-            'home': Key.home, 'end': Key.end, 
-            'page_up': Key.page_up, 'pageup': Key.page_up,
-            'page_down': Key.page_down, 'pagedown': Key.page_down,
-            'shift': Key.shift, 'ctrl': Key.ctrl, 'control': Key.ctrl,
-            'alt': Key.alt, 'cmd': Key.cmd, 'win': Key.cmd, 'windows': Key.cmd,
-            'caps_lock': Key.caps_lock, 'capslock': Key.caps_lock,
-            'pause': Key.pause, 'insert': Key.insert,
-            'menu': Key.menu
-        }
-        
-        # Add platform-specific keys if they exist
-        try:
-            mapping['print_screen'] = Key.print_screen
-            mapping['printscreen'] = Key.print_screen
-        except AttributeError:
-            pass
-        
-        try:
-            mapping['num_lock'] = Key.num_lock
-            mapping['numlock'] = Key.num_lock
-        except AttributeError:
-            pass
-            
-        try:
-            mapping['scroll_lock'] = Key.scroll_lock
-            mapping['scrolllock'] = Key.scroll_lock
-        except AttributeError:
-            pass
-            
-        return mapping
+        return self.platform_adapter.parse_combo(combo_str)
     
     def start_recording(self):
         """Start recording keyboard actions for macro creation."""
