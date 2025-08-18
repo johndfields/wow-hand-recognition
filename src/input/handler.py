@@ -311,28 +311,28 @@ class KeyboardHandler(InputHandlerBase):
             'shift': Key.shift, 'ctrl': Key.ctrl, 'control': Key.ctrl,
             'alt': Key.alt, 'cmd': Key.cmd, 'win': Key.cmd, 'windows': Key.cmd,
             'caps_lock': Key.caps_lock, 'capslock': Key.caps_lock,
-            'pause': Key.pause, 'insert': Key.insert,
             'menu': Key.menu
         }
         
         # Add platform-specific keys if they exist
-        try:
-            mapping['print_screen'] = Key.print_screen
-            mapping['printscreen'] = Key.print_screen
-        except AttributeError:
-            pass
+        # These keys may not be available on all platforms (especially macOS)
+        platform_specific_keys = [
+            ('pause', 'pause'),
+            ('insert', 'insert'),
+            ('print_screen', 'print_screen'),
+            ('printscreen', 'print_screen'),
+            ('num_lock', 'num_lock'),
+            ('numlock', 'num_lock'),
+            ('scroll_lock', 'scroll_lock'),
+            ('scrolllock', 'scroll_lock')
+        ]
         
-        try:
-            mapping['num_lock'] = Key.num_lock
-            mapping['numlock'] = Key.num_lock
-        except AttributeError:
-            pass
-            
-        try:
-            mapping['scroll_lock'] = Key.scroll_lock
-            mapping['scrolllock'] = Key.scroll_lock
-        except AttributeError:
-            pass
+        for key_name, attr_name in platform_specific_keys:
+            try:
+                mapping[key_name] = getattr(Key, attr_name)
+            except AttributeError:
+                logger.debug(f"Key '{attr_name}' not available on this platform, skipping")
+                pass
             
         return mapping
     
