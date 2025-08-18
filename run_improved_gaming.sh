@@ -40,6 +40,5 @@ echo "Make sure your Parallels Windows VM is focused!"
 echo "Starting in 3 seconds..."
 sleep 3
 
-# Run the application with the unified implementation
-python src/main.py --config gaming_config.json --mode modular --debug
-
+# Run the application with the unified implementation using uv
+uv run --python .venv/bin/python src/main.py --config gaming_config.json --mode modular --debug
