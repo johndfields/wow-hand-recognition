@@ -171,7 +171,8 @@ class HandToKeyApplication:
             temporal_smoothing=settings.enable_temporal_smoothing,
             smoothing_window=settings.smoothing_window,
             min_gesture_frames=settings.min_gesture_frames,
-            hand_preference=settings.hand_preference
+            hand_preference=settings.hand_preference,
+            config_manager=self.config_manager
         )
         
         # Start processing thread if threading enabled
@@ -316,6 +317,10 @@ class HandToKeyApplication:
         """Handle configuration reload event."""
         logger.info(f"Configuration reloaded: {file_path}")
         
+        # Update enabled gestures in the gesture processor
+        if hasattr(self, 'gesture_processor'):
+            self.gesture_processor.update_enabled_gestures_from_config()
+        
         # Only update gesture bindings if input handler is initialized
         if hasattr(self, 'input_handler'):
             self._update_gesture_bindings()
@@ -452,7 +457,7 @@ class HandToKeyApplication:
             cv2.imshow("Hand to Key - Enhanced", frame)
     
     def _handle_gesture(self, detection: GestureDetection):
-        """Handle a detected gesture."""
+        """Handle a detected gesture with state-change optimization."""
         gesture_name = detection.gesture_type.value
         
         # Check if in calibration mode
@@ -465,18 +470,25 @@ class HandToKeyApplication:
             # Recording handled separately
             return
         
-        # Execute gesture action
+        # Check if gesture is already active (state hasn't changed)
+        if gesture_name in self.input_handler.active_gestures:
+            # Gesture is already active - update continuation statistics but don't re-execute
+            confidence = getattr(detection, 'confidence', 1.0)
+            self.stats_tracker.record_gesture_continuation(gesture_name, confidence)
+            return
+        
+        # Gesture is new or reactivated - execute action
         success = self.input_handler.execute_gesture(gesture_name)
         
-        # Play audio feedback
+        # Play audio feedback only on new activations
         if success and self.audio_feedback:
             self.audio_feedback.play_gesture_sound(gesture_name)
         
-        # Update statistics with confidence
+        # Update statistics with confidence for new activation
         confidence = getattr(detection, 'confidence', 1.0)
         self.stats_tracker.record_gesture(gesture_name, success, confidence)
         
-        # Add notification for successful gestures in detailed mode
+        # Add notification for successful gestures in detailed mode (only new activations)
         if success and self.overlay_renderer.display_mode in ["detailed", "debug"]:
             action_text = self._get_gesture_action_text(gesture_name)
             if action_text:
@@ -638,6 +650,9 @@ class HandToKeyApplication:
         """Switch to a different profile."""
         if self.config_manager.activate_profile(profile_name):
             self.state.current_profile = profile_name
+            # Update enabled gestures in the gesture processor
+            if hasattr(self, 'gesture_processor'):
+                self.gesture_processor.update_enabled_gestures_from_config()
             self._update_gesture_bindings()
             logger.info(f"Switched to profile: {profile_name}")
             

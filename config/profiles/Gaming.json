@@ -16,7 +16,7 @@
     {
       "gesture": "fist",
       "action_type": "key",
-      "target": "s",
+      "target": "tab",
       "mode": "hold",
       "duration": 0.0,
       "cooldown": 0.0,
@@ -58,18 +58,7 @@
       "metadata": {}
     },
     {
-      "gesture": "thumbs_up",
-      "action_type": "key",
-      "target": "tab",
-      "mode": "hold",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
-    },
-    {
-      "gesture": "pinch_index",
+      "gesture": "rock_on",
       "action_type": "key",
       "target": "1",
       "mode": "tap",
@@ -80,7 +69,7 @@
       "metadata": {}
     },
     {
-      "gesture": "pinch_middle",
+      "gesture": "victory",
       "action_type": "key",
       "target": "2",
       "mode": "tap",

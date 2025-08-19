@@ -157,10 +157,24 @@ class StandardGestureDetector(GestureDetectorBase):
     
     def __init__(self, sensitivity: float = 1.0, 
                  enable_motion_gestures: bool = True,
-                 enable_custom_gestures: bool = False):
+                 enable_custom_gestures: bool = False,
+                 enabled_gestures: Optional[Set[str]] = None):
         self.sensitivity = sensitivity
         self.enable_motion_gestures = enable_motion_gestures
         self.enable_custom_gestures = enable_custom_gestures
+        # Convert enabled_gestures to GestureType set, or enable all if None
+        if enabled_gestures is not None:
+            self.enabled_gestures = set()
+            for gesture_str in enabled_gestures:
+                try:
+                    gesture_type = GestureType(gesture_str)
+                    self.enabled_gestures.add(gesture_type)
+                except ValueError:
+                    logger.warning(f"Unknown gesture type in enabled_gestures: {gesture_str}")
+        else:
+            # If no enabled_gestures specified, enable all gestures
+            self.enabled_gestures = set(GestureType)
+        
         self.motion_history: List[Tuple[float, float]] = []
         self.custom_gesture_models = {}
         # Store gesture confidence scores
@@ -171,6 +185,15 @@ class StandardGestureDetector(GestureDetectorBase):
         gestures = set()
         self.gesture_confidences = {}
         
+        # Debug: Log enabled gestures occasionally for troubleshooting
+        if hasattr(self, '_debug_counter'):
+            self._debug_counter += 1
+        else:
+            self._debug_counter = 0
+            
+        if self._debug_counter % 150 == 0:  # Log every ~5 seconds at 30 FPS
+            logger.info(f"Enabled gestures: {[g.value for g in self.enabled_gestures]}")
+        
         # Cache expensive finger extension calculations to avoid redundant computation
         self._cached_finger_states = {
             'thumb': self._thumb_extended(landmarks),
@@ -180,54 +203,55 @@ class StandardGestureDetector(GestureDetectorBase):
             'pinky': self._finger_extended(landmarks, 20, 18)
         }
         
-        # Detect pinch gestures first (higher priority)
+        # Detect pinch gestures first (higher priority) - only if enabled
         has_pinch = False
-        if self._is_pinch(landmarks, 8):
+        if GestureType.PINCH_INDEX in self.enabled_gestures and self._is_pinch(landmarks, 8):
             gestures.add(GestureType.PINCH_INDEX)
             has_pinch = True
-        if self._is_pinch(landmarks, 12):
+        if GestureType.PINCH_MIDDLE in self.enabled_gestures and self._is_pinch(landmarks, 12):
             gestures.add(GestureType.PINCH_MIDDLE)
             has_pinch = True
-        if self._is_pinch(landmarks, 16):
+        if GestureType.PINCH_RING in self.enabled_gestures and self._is_pinch(landmarks, 16):
             gestures.add(GestureType.PINCH_RING)
             has_pinch = True
-        if self._is_pinch(landmarks, 20):
+        if GestureType.PINCH_PINKY in self.enabled_gestures and self._is_pinch(landmarks, 20):
             gestures.add(GestureType.PINCH_PINKY)
             has_pinch = True
             
-        # Advanced gestures
-        if self._is_rock_on(landmarks):
+        # Advanced gestures - only if enabled
+        if GestureType.ROCK_ON in self.enabled_gestures and self._is_rock_on(landmarks):
             gestures.add(GestureType.ROCK_ON)
-        if self._is_l_shape(landmarks):
+        if GestureType.L_SHAPE in self.enabled_gestures and self._is_l_shape(landmarks):
             gestures.add(GestureType.L_SHAPE)
-        if self._is_hang_loose(landmarks):
+        if GestureType.HANG_LOOSE in self.enabled_gestures and self._is_hang_loose(landmarks):
             gestures.add(GestureType.HANG_LOOSE)
             
-        # Basic gesture detection - skip open palm if pinch is detected
-        if not has_pinch and self._is_open_palm(landmarks):
+        # Basic gesture detection - skip open palm if pinch is detected or if disabled
+        if GestureType.OPEN_PALM in self.enabled_gestures and not has_pinch and self._is_open_palm(landmarks):
             gestures.add(GestureType.OPEN_PALM)
         
-        # Detect fist first (higher priority than thumbs up)
+        # Detect fist first (higher priority than thumbs up) - only if enabled
         has_fist = False
-        if self._is_fist_optimized(landmarks):
+        if GestureType.FIST in self.enabled_gestures and self._is_fist_optimized(landmarks):
             gestures.add(GestureType.FIST)
             has_fist = True
         
-        if self._is_victory(landmarks):
+        # Other basic gestures - only if enabled
+        if GestureType.VICTORY in self.enabled_gestures and self._is_victory(landmarks):
             gestures.add(GestureType.VICTORY)
-        if self._is_three_fingers(landmarks):
+        if GestureType.THREE in self.enabled_gestures and self._is_three_fingers(landmarks):
             gestures.add(GestureType.THREE)
-        if self._is_index_only(landmarks):
+        if GestureType.INDEX_ONLY in self.enabled_gestures and self._is_index_only(landmarks):
             gestures.add(GestureType.INDEX_ONLY)
         
-        # Only check thumbs up if fist is not detected (performance optimization and conflict resolution)
-        if not has_fist and self._is_thumbs_up_optimized(landmarks):
+        # Only check thumbs up if enabled, fist is not detected, and not disabled
+        if GestureType.THUMBS_UP in self.enabled_gestures and not has_fist and self._is_thumbs_up_optimized(landmarks):
             gestures.add(GestureType.THUMBS_UP)
             
-        # Motion gestures
+        # Motion gestures - only check enabled ones
         if self.enable_motion_gestures:
             motion_gesture = self._detect_motion_gesture(landmarks)
-            if motion_gesture:
+            if motion_gesture and motion_gesture in self.enabled_gestures:
                 gestures.add(motion_gesture)
         
         # Clear cached finger states after detection
@@ -960,7 +984,8 @@ class GestureProcessor:
                  temporal_smoothing: bool = True,
                  smoothing_window: int = 3,
                  min_gesture_frames: int = 2,
-                 hand_preference: str = "right"):
+                 hand_preference: str = "right",
+                 config_manager=None):
         
         self.detector = detector
         self.enable_multi_hand = enable_multi_hand
@@ -972,6 +997,11 @@ class GestureProcessor:
         self.smoothing_window = smoothing_window
         self.min_gesture_frames = min_gesture_frames
         self.hand_preference = hand_preference
+        self.config_manager = config_manager
+        
+        # Update detector with enabled gestures from config if available
+        if self.config_manager and hasattr(self.detector, 'enabled_gestures'):
+            self.update_enabled_gestures_from_config()
         
         # MediaPipe setup
         self.mp_hands = mp.solutions.hands
@@ -1643,3 +1673,49 @@ class GestureProcessor:
                 return 0
         
         return mediapipe_hand_idx
+    
+    def update_enabled_gestures_from_config(self):
+        """Update the detector's enabled gestures based on the current config."""
+        if not self.config_manager or not hasattr(self.detector, 'enabled_gestures'):
+            return
+        
+        try:
+            # Get the active profile from config manager
+            active_profile = self.config_manager.active_profile
+            if not active_profile:
+                logger.warning("No active profile found, keeping all gestures enabled")
+                return
+            
+            # Extract enabled gestures from the profile's gesture mappings (list)
+            enabled_gestures = set()
+            gesture_mappings = active_profile.gesture_mappings
+            
+            for mapping in gesture_mappings:
+                # Only include enabled gestures
+                if mapping.enabled:
+                    enabled_gestures.add(mapping.gesture)
+            
+            # Convert to GestureType set and update detector
+            detector_enabled_gestures = set()
+            for gesture_str in enabled_gestures:
+                try:
+                    gesture_type = GestureType(gesture_str)
+                    detector_enabled_gestures.add(gesture_type)
+                except ValueError:
+                    logger.warning(f"Unknown gesture type from config: {gesture_str}")
+            
+            # Update the detector's enabled gestures
+            self.detector.enabled_gestures = detector_enabled_gestures
+            
+            logger.info(f"Updated gesture detector with {len(detector_enabled_gestures)} enabled gestures from config")
+            logger.debug(f"Enabled gestures: {[g.value for g in detector_enabled_gestures]}")
+            
+        except Exception as e:
+            logger.error(f"Error updating enabled gestures from config: {e}")
+            # Keep current enabled gestures on error
+    
+    def update_config_manager(self, config_manager):
+        """Update the config manager and refresh enabled gestures."""
+        self.config_manager = config_manager
+        if hasattr(self.detector, 'enabled_gestures'):
+            self.update_enabled_gestures_from_config()

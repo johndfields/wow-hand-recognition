@@ -98,6 +98,32 @@ class StatisticsTracker:
         
         self.average_confidence = sum(self.confidence_history) / len(self.confidence_history)
     
+    def record_gesture_continuation(self, gesture: str, confidence: float = 1.0):
+        """Record gesture continuation (no state change) for cleaner statistics.
+        
+        This method is called when a gesture is detected but is already active,
+        providing a way to track gesture stability and confidence without
+        inflating activation statistics.
+        """
+        # Update confidence tracking for the gesture
+        self.confidence_history.append(confidence)
+        if len(self.confidence_history) > 100:
+            self.confidence_history.pop(0)
+        
+        self.average_confidence = sum(self.confidence_history) / len(self.confidence_history)
+        
+        # Track gesture stability (how consistently it's being detected)
+        if gesture not in self.gesture_stability_scores:
+            self.gesture_stability_scores[gesture] = []
+        
+        # Higher confidence during continuation indicates more stability
+        self.gesture_stability_scores[gesture].append(confidence)
+        if len(self.gesture_stability_scores[gesture]) > 20:
+            self.gesture_stability_scores[gesture].pop(0)
+        
+        # Log continuation for debugging (at debug level to avoid spam)
+        logger.debug(f"Gesture continuation: {gesture} (confidence: {confidence:.2f})")
+    
     def record_frame_time(self, frame_time: float):
         """Record frame processing time."""
         self.frame_times.append(frame_time)
