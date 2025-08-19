@@ -841,6 +841,10 @@ class UnifiedInputHandler:
             'errors': 0,
             'avg_execution_time': 0.0
         }
+        
+        # Reference to statistics tracker for duration tracking
+        # This will be set by the main application
+        self.stats_tracker = None
     
     def start(self):
         """Start the input processing thread."""
@@ -880,17 +884,33 @@ class UnifiedInputHandler:
         if gesture_name not in self.gesture_bindings:
             return False
         
-        action = self.gesture_bindings[gesture_name]
-        
-        # Track gesture activation for hold mode management
-        self._activate_gesture(gesture_name, action)
-        
-        if isinstance(action, InputAction):
-            return self.execute_action(action)
-        elif isinstance(action, InputSequence):
-            return self.execute_sequence(action)
-        
-        return False
+        # Use lock to prevent race conditions during gesture execution
+        with self.lock:
+            # Double-check that the gesture isn't already active
+            # This is a critical validation step to prevent duplicate key sends
+            if gesture_name in self.active_gestures and gesture_name in self.gesture_hold_states:
+                logger.debug(f"Skipping execution for already active hold gesture: {gesture_name}")
+                return True  # Return true because the gesture is already successfully active
+            
+            action = self.gesture_bindings[gesture_name]
+            
+            # Track gesture activation for hold mode management
+            self._activate_gesture(gesture_name, action)
+            
+            # Execute the action based on its type
+            if isinstance(action, InputAction):
+                # For hold actions, add extra validation
+                if action.mode == InputMode.HOLD:
+                    # Log hold action for debugging
+                    logger.debug(f"Executing hold action for gesture: {gesture_name} -> {action.target}")
+                    return self.execute_action(action)
+                else:
+                    # For non-hold actions, proceed normally
+                    return self.execute_action(action)
+            elif isinstance(action, InputSequence):
+                return self.execute_sequence(action)
+            
+            return False
     
     def execute_action(self, action: InputAction) -> bool:
         """Execute a single input action."""
@@ -1032,37 +1052,64 @@ class UnifiedInputHandler:
     
     def _activate_gesture(self, gesture_name: str, action: Union[InputAction, InputSequence]):
         """Track gesture activation for hold mode functionality."""
-        self.active_gestures.add(gesture_name)
-        
-        # Track what this gesture is holding (for release mechanism)
-        if isinstance(action, InputAction) and action.mode == InputMode.HOLD:
-            if gesture_name not in self.gesture_hold_states:
-                self.gesture_hold_states[gesture_name] = {}
+        # Use lock to prevent race conditions
+        with self.lock:
+            # Add to active gestures set
+            self.active_gestures.add(gesture_name)
             
-            self.gesture_hold_states[gesture_name] = {
-                'action': action,
-                'activated_time': time.time()
-            }
-            
-            logger.debug(f"Activated hold gesture: {gesture_name} -> {action.target}")
+            # Track what this gesture is holding (for release mechanism)
+            if isinstance(action, InputAction) and action.mode == InputMode.HOLD:
+                # Check if this gesture is already in hold state
+                if gesture_name in self.gesture_hold_states:
+                    # Gesture is already in hold state, don't update it
+                    # This prevents overwriting the existing hold state and potentially
+                    # causing duplicate key sends
+                    logger.debug(f"Gesture {gesture_name} already in hold state, skipping activation")
+                    return
+                
+                # Initialize hold state tracking
+                self.gesture_hold_states[gesture_name] = {
+                    'action': action,
+                    'activated_time': time.time(),
+                    'last_update_time': time.time()
+                }
+                
+                logger.debug(f"Activated hold gesture: {gesture_name} -> {action.target}")
+            else:
+                # For non-hold actions, log activation
+                logger.debug(f"Activated gesture: {gesture_name}")
     
     def _deactivate_gesture(self, gesture_name: str):
         """Deactivate a gesture and release any held inputs."""
-        if gesture_name in self.active_gestures:
-            self.active_gestures.remove(gesture_name)
-        
-        # Release any held inputs for this gesture
-        if gesture_name in self.gesture_hold_states:
-            hold_state = self.gesture_hold_states[gesture_name]
-            action = hold_state['action']
+        # Use lock to prevent race conditions
+        with self.lock:
+            # Remove from active gestures set
+            if gesture_name in self.active_gestures:
+                self.active_gestures.remove(gesture_name)
+                logger.debug(f"Removed gesture from active set: {gesture_name}")
             
-            # Create and execute release action
-            release_action = self._create_release_action(action)
-            if release_action:
-                self.execute_action(release_action)
-                logger.debug(f"Released hold gesture: {gesture_name} -> {action.target}")
-            
-            del self.gesture_hold_states[gesture_name]
+            # Release any held inputs for this gesture
+            if gesture_name in self.gesture_hold_states:
+                hold_state = self.gesture_hold_states[gesture_name]
+                action = hold_state['action']
+                
+                # Calculate hold duration for logging
+                hold_duration = time.time() - hold_state['activated_time']
+                
+                # Create and execute release action
+                release_action = self._create_release_action(action)
+                if release_action:
+                    # Execute the release action
+                    result = self.execute_action(release_action)
+                    logger.debug(f"Released hold gesture: {gesture_name} -> {action.target} (held for {hold_duration:.2f}s, success: {result})")
+                else:
+                    logger.warning(f"Failed to create release action for gesture: {gesture_name}")
+                
+                # Remove from hold states
+                del self.gesture_hold_states[gesture_name]
+            else:
+                # If not a hold gesture, just log deactivation
+                logger.debug(f"Deactivated non-hold gesture: {gesture_name}")
     
     def _create_release_action(self, original_action: InputAction) -> Optional[InputAction]:
         """Create a release action for a hold action."""
@@ -1086,18 +1133,41 @@ class UnifiedInputHandler:
         
         This method should be called from the main application with the set of currently 
         detected gestures to ensure proper hold/release functionality.
+        
+        IMPORTANT: This method should be called BEFORE processing any gesture detections
+        to ensure proper hold state management and prevent race conditions.
         """
-        # Find gestures that are no longer active
-        gestures_to_deactivate = self.active_gestures - current_gestures
-        
-        # Deactivate gestures that are no longer detected
-        for gesture_name in gestures_to_deactivate:
-            self._deactivate_gesture(gesture_name)
-        
-        # Update active gestures to current set
-        self.active_gestures = current_gestures.copy()
-        
-        logger.debug(f"Active gestures updated: {current_gestures}")
+        # Use a lock to prevent race conditions during gesture state updates
+        with self.lock:
+            # Find gestures that are no longer active
+            gestures_to_deactivate = self.active_gestures - current_gestures
+            
+            # Find new gestures that weren't active before
+            new_gestures = current_gestures - self.active_gestures
+            
+            # Deactivate gestures that are no longer detected
+            for gesture_name in gestures_to_deactivate:
+                self._deactivate_gesture(gesture_name)
+                # End tracking gesture duration for statistics
+                if hasattr(self, 'stats_tracker') and self.stats_tracker:
+                    duration = self.stats_tracker.end_gesture_duration(gesture_name)
+                    logger.debug(f"Gesture {gesture_name} ended after {duration:.2f}s")
+            
+            # Update active gestures to current set
+            self.active_gestures = current_gestures.copy()
+            
+            # Log state changes for debugging
+            if gestures_to_deactivate:
+                logger.debug(f"Deactivated gestures: {gestures_to_deactivate}")
+            if new_gestures:
+                logger.debug(f"New gestures detected: {new_gestures}")
+            
+            # Return information about state changes for potential use by caller
+            return {
+                "deactivated": gestures_to_deactivate,
+                "new": new_gestures,
+                "active": self.active_gestures
+            }
     
     def get_active_gestures(self) -> Set[str]:
         """Get the set of currently active gestures."""

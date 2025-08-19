@@ -184,6 +184,9 @@ class HandToKeyApplication:
         self.input_handler = UnifiedInputHandler()
         self.input_handler.start()
         
+        # Set stats_tracker in input_handler for duration tracking
+        self.input_handler.stats_tracker = self.stats_tracker
+        
         # Bind gestures from active profile
         self._update_gesture_bindings()
     
@@ -416,12 +419,14 @@ class HandToKeyApplication:
         # Extract currently detected gesture names for state tracking
         current_gesture_names = {detection.gesture_type.value for detection in detections}
         
-        # Process detections
+        # IMPORTANT: Update active gestures BEFORE processing detections
+        # This ensures proper hold state management and prevents race conditions
+        # between gesture detection and hold state tracking
+        self.input_handler.update_active_gestures(current_gesture_names)
+        
+        # Now process detections with updated active gesture state
         for detection in detections:
             self._handle_gesture(detection)
-        
-        # Update gesture state management for hold/release functionality
-        self.input_handler.update_active_gestures(current_gesture_names)
         
         # Update gesture history
         self.state.gesture_history.extend(detections)
@@ -470,20 +475,36 @@ class HandToKeyApplication:
             # Recording handled separately
             return
         
-        # Check if gesture is already active (state hasn't changed)
+        # Enhanced check for already active gestures
+        # This check is now more robust because we update active_gestures BEFORE processing detections
         if gesture_name in self.input_handler.active_gestures:
-            # Gesture is already active - update continuation statistics but don't re-execute
+            # Check if this gesture is in hold mode
+            is_hold_gesture = gesture_name in self.input_handler.gesture_hold_states
+            
+            # For hold gestures, we don't even update statistics to prevent count inflation
+            if is_hold_gesture:
+                # Just log at debug level for troubleshooting
+                logger.debug(f"Skipping already active hold gesture: {gesture_name}")
+                return
+                
+            # For non-hold gestures that are active but not in hold mode,
+            # we still update continuation statistics but don't re-execute
             confidence = getattr(detection, 'confidence', 1.0)
             self.stats_tracker.record_gesture_continuation(gesture_name, confidence)
             return
         
         # Gesture is new or reactivated - execute action
+        logger.debug(f"Executing new gesture: {gesture_name}")
         success = self.input_handler.execute_gesture(gesture_name)
         
         # Play audio feedback only on new activations
         if success and self.audio_feedback:
             self.audio_feedback.play_gesture_sound(gesture_name)
         
+        # Start tracking gesture duration for statistics
+        if success:
+            self.stats_tracker.start_gesture_duration(gesture_name)
+            
         # Update statistics with confidence for new activation
         confidence = getattr(detection, 'confidence', 1.0)
         self.stats_tracker.record_gesture(gesture_name, success, confidence)
