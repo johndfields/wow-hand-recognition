@@ -86,6 +86,8 @@ class ApplicationSettings:
     show_preview: bool = True
     show_statistics: bool = True
     show_debug_info: bool = False
+    show_hand_landmarks: bool = True
+    show_hand_connections: bool = True
     ui_scale: float = 1.0
     theme: str = "dark"
     
@@ -103,6 +105,9 @@ class ApplicationSettings:
     require_confirmation: bool = False
     camera_indicator: bool = True
     log_actions: bool = True
+    
+    # Hand preference settings
+    hand_preference: str = "right"  # "left", "right", or "both"
     
     # Paths
     config_dir: str = "./config"
@@ -172,6 +177,8 @@ class ConfigSchema:
             "show_preview": {"type": "boolean"},
             "show_statistics": {"type": "boolean"},
             "show_debug_info": {"type": "boolean"},
+            "show_hand_landmarks": {"type": "boolean"},
+            "show_hand_connections": {"type": "boolean"},
             "ui_scale": {"type": "number", "minimum": 0.5, "maximum": 3.0},
             "theme": {"type": "string", "enum": ["light", "dark", "auto"]},
             "enable_sound_feedback": {"type": "boolean"},
@@ -182,7 +189,8 @@ class ConfigSchema:
             "voice_commands": {"type": "boolean"},
             "require_confirmation": {"type": "boolean"},
             "camera_indicator": {"type": "boolean"},
-            "log_actions": {"type": "boolean"}
+            "log_actions": {"type": "boolean"},
+            "hand_preference": {"type": "string", "enum": ["left", "right", "both"]}
         },
         "additionalProperties": False
     }

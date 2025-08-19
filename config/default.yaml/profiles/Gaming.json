@@ -1,11 +1,55 @@
 {
-  "name": "Productivity",
-  "description": "Optimized for productivity with shortcuts and navigation",
+  "name": "Gaming",
+  "description": "Optimized for gaming with WASD movement and action keys",
   "gesture_mappings": [
     {
-      "gesture": "swipe_left",
+      "gesture": "open_palm",
       "action_type": "key",
-      "target": "alt+left",
+      "target": "w",
+      "mode": "hold",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "fist",
+      "action_type": "key",
+      "target": "s",
+      "mode": "hold",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "l_shape",
+      "action_type": "key",
+      "target": "a",
+      "mode": "hold",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "hang_loose",
+      "action_type": "key",
+      "target": "d",
+      "mode": "hold",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
+      "gesture": "index_only",
+      "action_type": "mouse",
+      "target": "right_click",
       "mode": "tap",
       "duration": 0.0,
       "cooldown": 0.0,
@@ -14,31 +58,9 @@
       "metadata": {}
     },
     {
-      "gesture": "swipe_right",
+      "gesture": "thumbs_up",
       "action_type": "key",
-      "target": "alt+right",
-      "mode": "tap",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
-    },
-    {
-      "gesture": "swipe_up",
-      "action_type": "key",
-      "target": "page_up",
-      "mode": "tap",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
-    },
-    {
-      "gesture": "swipe_down",
-      "action_type": "key",
-      "target": "page_down",
+      "target": "tab",
       "mode": "tap",
       "duration": 0.0,
       "cooldown": 0.0,
@@ -49,7 +71,7 @@
     {
       "gesture": "pinch_index",
       "action_type": "key",
-      "target": "ctrl+c",
+      "target": "1",
       "mode": "tap",
       "duration": 0.0,
       "cooldown": 0.0,
@@ -60,7 +82,7 @@
     {
       "gesture": "pinch_middle",
       "action_type": "key",
-      "target": "ctrl+v",
+      "target": "2",
       "mode": "tap",
       "duration": 0.0,
       "cooldown": 0.0,
@@ -71,7 +93,7 @@
     {
       "gesture": "pinch_ring",
       "action_type": "key",
-      "target": "ctrl+z",
+      "target": "3",
       "mode": "tap",
       "duration": 0.0,
       "cooldown": 0.0,
@@ -82,29 +104,7 @@
     {
       "gesture": "pinch_pinky",
       "action_type": "key",
-      "target": "ctrl+y",
-      "mode": "tap",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
-    },
-    {
-      "gesture": "open_palm",
-      "action_type": "key",
-      "target": "ctrl+s",
-      "mode": "tap",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
-    },
-    {
-      "gesture": "fist",
-      "action_type": "key",
-      "target": "escape",
+      "target": "4",
       "mode": "tap",
       "duration": 0.0,
       "cooldown": 0.0,
@@ -115,5 +115,5 @@
   ],
   "settings": {},
   "parent_profile": null,
-  "is_active": true
+  "is_active": false
 }

@@ -114,7 +114,6 @@ class StandardGestureDetector(GestureDetectorBase):
         GestureType.PINCH_RING: 12,
         GestureType.PINCH_PINKY: 12,
         # Advanced gestures have high priority
-        GestureType.OK_SIGN: 10,
         GestureType.ROCK_ON: 10,
         # Gaming profile gestures
         GestureType.L_SHAPE: 8,
@@ -143,8 +142,6 @@ class StandardGestureDetector(GestureDetectorBase):
         {GestureType.OPEN_PALM, GestureType.FIST, GestureType.VICTORY, 
          GestureType.THREE, GestureType.INDEX_ONLY, GestureType.THUMBS_UP,
          GestureType.L_SHAPE, GestureType.HANG_LOOSE},
-        # OK sign conflicts with pinch index
-        {GestureType.OK_SIGN, GestureType.PINCH_INDEX},
         # Rock on conflicts with certain gestures
         {GestureType.ROCK_ON, GestureType.OPEN_PALM, GestureType.FIST},
         # L_SHAPE conflicts with certain gestures
@@ -189,8 +186,6 @@ class StandardGestureDetector(GestureDetectorBase):
             has_pinch = True
             
         # Advanced gestures
-        if self._is_ok_sign(landmarks):
-            gestures.add(GestureType.OK_SIGN)
         if self._is_rock_on(landmarks):
             gestures.add(GestureType.ROCK_ON)
         if self._is_l_shape(landmarks):
@@ -393,43 +388,74 @@ class StandardGestureDetector(GestureDetectorBase):
     
     def _is_fist(self, landmarks: List[Any]) -> bool:
         """Detect fist gesture."""
-        return not any([
+        is_fist = not any([
             self._finger_extended(landmarks, 8, 6),
             self._finger_extended(landmarks, 12, 10),
             self._finger_extended(landmarks, 16, 14),
             self._finger_extended(landmarks, 20, 18),
             self._thumb_extended(landmarks)
         ])
+        
+        if is_fist:
+            # Calculate confidence based on how curled the fingers are
+            confidence = self._get_fist_confidence(landmarks)
+            self.gesture_confidences[GestureType.FIST] = confidence
+        
+        return is_fist
     
     def _is_victory(self, landmarks: List[Any]) -> bool:
         """Detect victory/peace gesture."""
-        return (self._finger_extended(landmarks, 8, 6) and 
-                self._finger_extended(landmarks, 12, 10) and
-                not self._finger_extended(landmarks, 16, 14) and
-                not self._finger_extended(landmarks, 20, 18))
+        is_victory = (self._finger_extended(landmarks, 8, 6) and 
+                     self._finger_extended(landmarks, 12, 10) and
+                     not self._finger_extended(landmarks, 16, 14) and
+                     not self._finger_extended(landmarks, 20, 18))
+        
+        if is_victory:
+            confidence = self._get_victory_confidence(landmarks)
+            self.gesture_confidences[GestureType.VICTORY] = confidence
+        
+        return is_victory
     
     def _is_three_fingers(self, landmarks: List[Any]) -> bool:
         """Detect three fingers gesture."""
-        return (self._finger_extended(landmarks, 8, 6) and 
-                self._finger_extended(landmarks, 12, 10) and
-                self._finger_extended(landmarks, 16, 14) and
-                not self._finger_extended(landmarks, 20, 18))
+        is_three = (self._finger_extended(landmarks, 8, 6) and 
+                   self._finger_extended(landmarks, 12, 10) and
+                   self._finger_extended(landmarks, 16, 14) and
+                   not self._finger_extended(landmarks, 20, 18))
+        
+        if is_three:
+            confidence = self._get_three_fingers_confidence(landmarks)
+            self.gesture_confidences[GestureType.THREE] = confidence
+        
+        return is_three
     
     def _is_index_only(self, landmarks: List[Any]) -> bool:
         """Detect index finger only gesture."""
-        return (self._finger_extended(landmarks, 8, 6) and
-                not self._finger_extended(landmarks, 12, 10) and
-                not self._finger_extended(landmarks, 16, 14) and
-                not self._finger_extended(landmarks, 20, 18) and
-                not self._thumb_extended(landmarks))
+        is_index_only = (self._finger_extended(landmarks, 8, 6) and
+                        not self._finger_extended(landmarks, 12, 10) and
+                        not self._finger_extended(landmarks, 16, 14) and
+                        not self._finger_extended(landmarks, 20, 18) and
+                        not self._thumb_extended(landmarks))
+        
+        if is_index_only:
+            confidence = self._get_index_only_confidence(landmarks)
+            self.gesture_confidences[GestureType.INDEX_ONLY] = confidence
+        
+        return is_index_only
     
     def _is_thumbs_up(self, landmarks: List[Any]) -> bool:
         """Detect thumbs up gesture."""
-        return (self._thumb_extended(landmarks) and
-                not self._finger_extended(landmarks, 8, 6) and
-                not self._finger_extended(landmarks, 12, 10) and
-                not self._finger_extended(landmarks, 16, 14) and
-                not self._finger_extended(landmarks, 20, 18))
+        is_thumbs_up = (self._thumb_extended(landmarks) and
+                       not self._finger_extended(landmarks, 8, 6) and
+                       not self._finger_extended(landmarks, 12, 10) and
+                       not self._finger_extended(landmarks, 16, 14) and
+                       not self._finger_extended(landmarks, 20, 18))
+        
+        if is_thumbs_up:
+            confidence = self._get_thumbs_up_confidence(landmarks)
+            self.gesture_confidences[GestureType.THUMBS_UP] = confidence
+        
+        return is_thumbs_up
     
     def _fingers_are_spread(self, landmarks: List[Any]) -> bool:
         """Check if fingers are well-separated from each other."""
@@ -473,36 +499,66 @@ class StandardGestureDetector(GestureDetectorBase):
         
         return d < ratio * diag
     
-    def _is_ok_sign(self, landmarks: List[Any]) -> bool:
-        """Detect OK sign gesture."""
-        # Thumb and index touching, other fingers extended
-        return (self._is_pinch(landmarks, 8) and
-                self._finger_extended(landmarks, 12, 10) and
-                self._finger_extended(landmarks, 16, 14) and
-                self._finger_extended(landmarks, 20, 18))
-    
     def _is_rock_on(self, landmarks: List[Any]) -> bool:
         """Detect rock on gesture (index and pinky extended)."""
-        return (self._finger_extended(landmarks, 8, 6) and
-                not self._finger_extended(landmarks, 12, 10) and
-                not self._finger_extended(landmarks, 16, 14) and
-                self._finger_extended(landmarks, 20, 18))
+        is_rock_on = (self._finger_extended(landmarks, 8, 6) and
+                     not self._finger_extended(landmarks, 12, 10) and
+                     not self._finger_extended(landmarks, 16, 14) and
+                     self._finger_extended(landmarks, 20, 18))
+        
+        if is_rock_on:
+            # Calculate confidence based on finger states
+            index_ext = float(self._finger_extended(landmarks, 8, 6))
+            middle_curl = float(not self._finger_extended(landmarks, 12, 10))
+            ring_curl = float(not self._finger_extended(landmarks, 16, 14))
+            pinky_ext = float(self._finger_extended(landmarks, 20, 18))
+            
+            confidence = (index_ext + middle_curl + ring_curl + pinky_ext) / 4.0
+            self.gesture_confidences[GestureType.ROCK_ON] = confidence
+        
+        return is_rock_on
                 
     def _is_l_shape(self, landmarks: List[Any]) -> bool:
         """Detect L shape gesture (thumb and index extended at right angle)."""
-        return (self._thumb_extended(landmarks) and
-                self._finger_extended(landmarks, 8, 6) and
-                not self._finger_extended(landmarks, 12, 10) and
-                not self._finger_extended(landmarks, 16, 14) and
-                not self._finger_extended(landmarks, 20, 18))
+        is_l_shape = (self._thumb_extended(landmarks) and
+                     self._finger_extended(landmarks, 8, 6) and
+                     not self._finger_extended(landmarks, 12, 10) and
+                     not self._finger_extended(landmarks, 16, 14) and
+                     not self._finger_extended(landmarks, 20, 18))
+        
+        if is_l_shape:
+            # Calculate confidence based on finger states
+            thumb_ext = float(self._thumb_extended(landmarks))
+            index_ext = float(self._finger_extended(landmarks, 8, 6))
+            middle_curl = float(not self._finger_extended(landmarks, 12, 10))
+            ring_curl = float(not self._finger_extended(landmarks, 16, 14))
+            pinky_curl = float(not self._finger_extended(landmarks, 20, 18))
+            
+            confidence = (thumb_ext * 0.25 + index_ext * 0.25 + middle_curl * 0.17 + ring_curl * 0.16 + pinky_curl * 0.17)
+            self.gesture_confidences[GestureType.L_SHAPE] = confidence
+        
+        return is_l_shape
                 
     def _is_hang_loose(self, landmarks: List[Any]) -> bool:
         """Detect hang loose gesture (thumb and pinky extended, middle fingers closed)."""
-        return (self._thumb_extended(landmarks) and
-                not self._finger_extended(landmarks, 8, 6) and
-                not self._finger_extended(landmarks, 12, 10) and
-                not self._finger_extended(landmarks, 16, 14) and
-                self._finger_extended(landmarks, 20, 18))
+        is_hang_loose = (self._thumb_extended(landmarks) and
+                        not self._finger_extended(landmarks, 8, 6) and
+                        not self._finger_extended(landmarks, 12, 10) and
+                        not self._finger_extended(landmarks, 16, 14) and
+                        self._finger_extended(landmarks, 20, 18))
+        
+        if is_hang_loose:
+            # Calculate confidence based on finger states
+            thumb_ext = float(self._thumb_extended(landmarks))
+            index_curl = float(not self._finger_extended(landmarks, 8, 6))
+            middle_curl = float(not self._finger_extended(landmarks, 12, 10))
+            ring_curl = float(not self._finger_extended(landmarks, 16, 14))
+            pinky_ext = float(self._finger_extended(landmarks, 20, 18))
+            
+            confidence = (thumb_ext * 0.25 + index_curl * 0.19 + middle_curl * 0.18 + ring_curl * 0.18 + pinky_ext * 0.20)
+            self.gesture_confidences[GestureType.HANG_LOOSE] = confidence
+        
+        return is_hang_loose
     
     def _detect_motion_gesture(self, landmarks: List[Any]) -> Optional[GestureType]:
         """Detect motion-based gestures like swipes."""
@@ -584,6 +640,38 @@ class StandardGestureDetector(GestureDetectorBase):
         ]) / 4.0
         
         return (thumb_extended * 0.5 + fingers_curled * 0.5)
+    
+    def _get_three_fingers_confidence(self, landmarks: List[Any]) -> float:
+        """Calculate confidence for three fingers gesture."""
+        index_extended = self._finger_extended(landmarks, 8, 6)
+        middle_extended = self._finger_extended(landmarks, 12, 10)
+        ring_extended = self._finger_extended(landmarks, 16, 14)
+        pinky_curled = not self._finger_extended(landmarks, 20, 18)
+        
+        score = 0.0
+        if index_extended: score += 0.25
+        if middle_extended: score += 0.25
+        if ring_extended: score += 0.25
+        if pinky_curled: score += 0.25
+        
+        return score
+    
+    def _get_index_only_confidence(self, landmarks: List[Any]) -> float:
+        """Calculate confidence for index only gesture."""
+        index_extended = self._finger_extended(landmarks, 8, 6)
+        middle_curled = not self._finger_extended(landmarks, 12, 10)
+        ring_curled = not self._finger_extended(landmarks, 16, 14)
+        pinky_curled = not self._finger_extended(landmarks, 20, 18)
+        thumb_curled = not self._thumb_extended(landmarks)
+        
+        score = 0.0
+        if index_extended: score += 0.3
+        if middle_curled: score += 0.175
+        if ring_curled: score += 0.175
+        if pinky_curled: score += 0.175
+        if thumb_curled: score += 0.175
+        
+        return score
 
 
 class CustomGestureDetector(GestureDetectorBase):
@@ -679,7 +767,8 @@ class GestureProcessor:
                  confidence_threshold: float = 0.6,
                  temporal_smoothing: bool = True,
                  smoothing_window: int = 3,
-                 min_gesture_frames: int = 2):
+                 min_gesture_frames: int = 2,
+                 hand_preference: str = "right"):
         
         self.detector = detector
         self.enable_multi_hand = enable_multi_hand
@@ -690,6 +779,7 @@ class GestureProcessor:
         self.temporal_smoothing = temporal_smoothing
         self.smoothing_window = smoothing_window
         self.min_gesture_frames = min_gesture_frames
+        self.hand_preference = hand_preference
         
         # MediaPipe setup
         self.mp_hands = mp.solutions.hands
@@ -700,6 +790,12 @@ class GestureProcessor:
         self.hand_trackings: Dict[int, HandTracking] = {}
         self.frame_counter = 0
         self.processing_time_avg = 0.0
+        
+        # Enhanced hand tracking for persistence
+        self.persistent_hand_tracking: Optional[HandTracking] = None
+        self.hand_lost_frames = 0
+        self.max_lost_frames = 10  # Allow up to 10 frames without detection before clearing
+        self.redetection_threshold = 0.3  # Distance threshold for hand redetection
         
         # Gesture history for temporal filtering
         self.gesture_history: Dict[int, List[Set[GestureType]]] = {}
@@ -726,9 +822,9 @@ class GestureProcessor:
             self.hands = self.mp_hands.Hands(
                 static_image_mode=False,
                 max_num_hands=self.max_hands,
-                model_complexity=1 if not enable_gpu else 2,
-                min_detection_confidence=confidence_threshold,
-                min_tracking_confidence=confidence_threshold
+                model_complexity=1,  # Use model complexity 1 for better compatibility
+                min_detection_confidence=max(0.5, confidence_threshold * 0.8),  # Lower detection threshold for redetection
+                min_tracking_confidence=max(0.3, confidence_threshold * 0.6)    # Lower tracking threshold for persistence
             )
             self.mediapipe_initialized = True
         except Exception as e:
@@ -786,13 +882,27 @@ class GestureProcessor:
                 0.9 * self.stats['avg_processing_time'] + 0.1 * processing_time
             )
             
+            # Handle hand redetection and persistence
+            self._handle_hand_persistence(results)
+            
             if results.multi_hand_landmarks:
                 for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
+                    # Apply hand preference filtering
+                    if not self._should_process_hand(hand_idx, results.multi_handedness):
+                        continue
+                        
+                    # Calculate hand position for persistence tracking
+                    palm_center = hand_landmarks.landmark[9]
+                    current_position = (palm_center.x, palm_center.y)
+                    
+                    # Handle hand redetection - try to match with persistent tracking
+                    persistent_hand_idx = self._match_persistent_hand(current_position, hand_idx)
+                    
                     # Detect gestures
                     gesture_types = self.detector.detect(hand_landmarks.landmark)
                     
-                    # Store current gestures for this hand
-                    current_gestures_by_hand[hand_idx] = gesture_types
+                    # Store current gestures for this hand (using persistent index)
+                    current_gestures_by_hand[persistent_hand_idx] = gesture_types
                     
                     # Create detection objects with confidence scores
                     for gesture_type in gesture_types:
@@ -1081,28 +1191,87 @@ class GestureProcessor:
             'avg_processing_time': 0.0
         }
     
-    def draw_debug_info(self, frame: np.ndarray, detections: List[GestureDetection]):
-        """Draw debug information on frame."""
+    def draw_debug_info(self, frame: np.ndarray, detections: List[GestureDetection], 
+                       show_landmarks: bool = True, show_connections: bool = True):
+        """Draw debug information on frame with customizable visualization options."""
         h, w = frame.shape[:2]
         
+        # Debug info: show if we have any detections
+        logger.debug(f"Drawing debug info for {len(detections)} detections, landmarks={show_landmarks}, connections={show_connections}")
+        
         for detection in detections:
+            logger.debug(f"Processing detection: {detection.gesture_type.value}, has_landmarks={detection.landmarks is not None}")
+            
             if detection.landmarks:
-                # Draw hand landmarks
-                self.mp_drawing.draw_landmarks(
-                    frame, 
-                    detection.landmarks,
-                    self.mp_hands.HAND_CONNECTIONS,
-                    self.mp_styles.get_default_hand_landmarks_style(),
-                    self.mp_styles.get_default_hand_connections_style()
-                )
+                # Draw hand landmarks and connections based on settings
+                if show_landmarks or show_connections:
+                    try:
+                        # Custom landmark and connection styles
+                        landmark_style = self.mp_drawing.DrawingSpec(
+                            color=(0, 255, 0),  # Green landmarks
+                            thickness=2,
+                            circle_radius=4
+                        )
+                        
+                        connection_style = self.mp_drawing.DrawingSpec(
+                            color=(255, 255, 255),  # White connections
+                            thickness=2
+                        )
+                        
+                        # Draw based on user preferences
+                        if show_landmarks and show_connections:
+                            logger.debug("Drawing both landmarks and connections")
+                            self.mp_drawing.draw_landmarks(
+                                frame, 
+                                detection.landmarks,
+                                self.mp_hands.HAND_CONNECTIONS,
+                                landmark_style,
+                                connection_style
+                            )
+                        elif show_landmarks:
+                            logger.debug("Drawing landmarks only")
+                            self.mp_drawing.draw_landmarks(
+                                frame, 
+                                detection.landmarks,
+                                None,  # No connections
+                                landmark_style,
+                                None
+                            )
+                        elif show_connections:
+                            logger.debug("Drawing connections only")
+                            # For connections only, we still need some landmark style
+                            invisible_landmark_style = self.mp_drawing.DrawingSpec(
+                                color=(0, 0, 0),  # Invisible
+                                thickness=0,
+                                circle_radius=0
+                            )
+                            self.mp_drawing.draw_landmarks(
+                                frame, 
+                                detection.landmarks,
+                                self.mp_hands.HAND_CONNECTIONS,
+                                invisible_landmark_style,  # Invisible landmarks
+                                connection_style
+                            )
+                    except Exception as e:
+                        logger.error(f"Error drawing landmarks: {e}")
                 
                 # Draw gesture info
                 x = int(detection.position[0] * w)
                 y = int(detection.position[1] * h)
                 
-                text = f"{detection.gesture_type.value}: {detection.confidence:.2f}"
-                cv2.putText(frame, text, (x-50, y-20), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                # Hand preference indicator
+                hand_label = f"Hand {detection.hand_index}"
+                if self.hand_preference != "both":
+                    hand_label += f" ({self.hand_preference})" 
+                
+                # Main gesture text
+                gesture_text = f"{detection.gesture_type.value}: {detection.confidence:.2f}"
+                cv2.putText(frame, gesture_text, (x-70, y-30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                
+                # Hand preference info
+                cv2.putText(frame, hand_label, (x-50, y-10), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
                 
                 # Draw velocity vector
                 if abs(detection.velocity[0]) > 0.01 or abs(detection.velocity[1]) > 0.01:
@@ -1110,13 +1279,27 @@ class GestureProcessor:
                     vy = int(detection.velocity[1] * 100)
                     cv2.arrowedLine(frame, (x, y), (x + vx, y + vy), 
                                    (255, 0, 0), 2)
+                    
+                    # Velocity magnitude text
+                    velocity_mag = np.sqrt(detection.velocity[0]**2 + detection.velocity[1]**2)
+                    if velocity_mag > 0.05:  # Only show if significant movement
+                        cv2.putText(frame, f"v: {velocity_mag:.2f}", (x + vx + 10, y + vy), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
+                
+                # Draw center point for hand
+                cv2.circle(frame, (x, y), 5, (0, 0, 255), -1)  # Red center point
         
         # Draw statistics
         stats_text = [
             f"FPS: {1.0/self.stats['avg_processing_time']:.1f}" if self.stats['avg_processing_time'] > 0 else "FPS: --",
             f"Confidence: {self.stats['avg_confidence']:.2f}",
-            f"Gestures: {self.stats['gestures_detected']}"
+            f"Gestures: {self.stats['gestures_detected']}",
+            f"Hand Preference: {self.hand_preference.title()}"
         ]
+        
+        # Background for stats
+        cv2.rectangle(frame, (5, 5), (250, 30 + len(stats_text) * 25), (0, 0, 0), -1)
+        cv2.rectangle(frame, (5, 5), (250, 30 + len(stats_text) * 25), (255, 255, 255), 1)
         
         y_offset = 30
         for text in stats_text:
@@ -1125,3 +1308,122 @@ class GestureProcessor:
             y_offset += 25
         
         return frame
+    
+    def _should_process_hand(self, hand_idx: int, multi_handedness: Any) -> bool:
+        """
+        Determine whether to process a hand based on the hand preference setting.
+        
+        Args:
+            hand_idx: Index of the hand (0 or 1)
+            multi_handedness: MediaPipe handedness classification results
+            
+        Returns:
+            True if the hand should be processed, False otherwise
+        """
+        # If preference is 'both', process all hands
+        if self.hand_preference == "both":
+            return True
+        
+        # If no handedness information available, process all hands as fallback
+        if not multi_handedness or hand_idx >= len(multi_handedness):
+            logger.warning(f"No handedness information available for hand {hand_idx}, processing anyway")
+            return True
+        
+        # Get the handedness classification for this hand
+        try:
+            hand_classification = multi_handedness[hand_idx]
+            # MediaPipe returns handedness from the perspective of the person in the image
+            # So 'Left' means the person's left hand, which appears on the right side of the image
+            handedness_label = hand_classification.classification[0].label.lower()
+            
+            # Map MediaPipe handedness to our preference system
+            # Note: MediaPipe's coordinate system is mirrored, so we need to invert
+            if handedness_label == "left":
+                detected_hand = "left"  # Person's left hand
+            elif handedness_label == "right":
+                detected_hand = "right"  # Person's right hand
+            else:
+                # Unknown handedness, process as fallback
+                logger.warning(f"Unknown handedness classification: {handedness_label}")
+                return True
+            
+            # Check if this hand matches our preference
+            should_process = (detected_hand == self.hand_preference)
+            
+            logger.debug(f"Hand {hand_idx}: detected as {detected_hand}, preference is {self.hand_preference}, processing: {should_process}")
+            return should_process
+            
+        except (IndexError, AttributeError) as e:
+            logger.warning(f"Error accessing handedness classification: {e}, processing hand anyway")
+            return True
+    
+    def _handle_hand_persistence(self, results):
+        """Handle hand tracking persistence and redetection."""
+        if results.multi_hand_landmarks:
+            # Hand detected, reset lost frames counter
+            self.hand_lost_frames = 0
+            
+            # If we only have one hand detected and it's the first detection,
+            # or if we need to update persistent tracking
+            if len(results.multi_hand_landmarks) == 1:
+                palm_center = results.multi_hand_landmarks[0].landmark[9]
+                current_position = (palm_center.x, palm_center.y)
+                
+                # Update or create persistent tracking
+                if self.persistent_hand_tracking is None:
+                    # New hand detected
+                    self.persistent_hand_tracking = HandTracking(hand_id=0)
+                    self.persistent_hand_tracking.positions.append(current_position)
+                    self.persistent_hand_tracking.last_update = time.time()
+                    logger.debug("Started persistent hand tracking")
+                else:
+                    # Update existing tracking
+                    self.persistent_hand_tracking.positions.append(current_position)
+                    self.persistent_hand_tracking.last_update = time.time()
+                    # Keep position history limited
+                    if len(self.persistent_hand_tracking.positions) > 100:
+                        self.persistent_hand_tracking.positions.pop(0)
+        else:
+            # No hand detected, increment lost frames counter
+            self.hand_lost_frames += 1
+            
+            # Clear persistent tracking if hand has been lost too long
+            if self.hand_lost_frames > self.max_lost_frames:
+                if self.persistent_hand_tracking is not None:
+                    logger.debug(f"Clearing persistent hand tracking after {self.hand_lost_frames} lost frames")
+                    self.persistent_hand_tracking = None
+                    self.hand_lost_frames = 0
+                    
+                    # Clear related tracking data
+                    self.hand_trackings.clear()
+                    self.gesture_history.clear()
+                    self.last_reported_gestures.clear()
+                    # Keep some gesture stability for quick redetection
+                    for key in list(self.gesture_stability_count.keys()):
+                        self.gesture_stability_count[key] *= 0.5  # Reduce stability but don't clear
+    
+    def _match_persistent_hand(self, current_position: Tuple[float, float], mediapipe_hand_idx: int) -> int:
+        """Match a detected hand with persistent tracking."""
+        # If no persistent tracking, use MediaPipe index
+        if self.persistent_hand_tracking is None:
+            return mediapipe_hand_idx
+        
+        # If we have persistent tracking, try to match based on position
+        if self.persistent_hand_tracking.positions:
+            last_position = self.persistent_hand_tracking.positions[-1]
+            distance = np.sqrt(
+                (current_position[0] - last_position[0])**2 + 
+                (current_position[1] - last_position[1])**2
+            )
+            
+            # If the hand is close to the last known position, consider it the same hand
+            if distance < self.redetection_threshold:
+                logger.debug(f"Hand matched with persistent tracking (distance: {distance:.3f})")
+                return 0  # Use consistent index 0 for persistent hand
+            else:
+                logger.debug(f"Hand position changed significantly (distance: {distance:.3f}), treating as new hand")
+                # Create new persistent tracking for this position
+                self.persistent_hand_tracking = HandTracking(hand_id=0)
+                return 0
+        
+        return mediapipe_hand_idx

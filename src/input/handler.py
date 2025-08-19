@@ -651,6 +651,7 @@ class GamepadHandler(InputHandlerBase):
         self.virtual_buttons: Dict[str, bool] = {}
         self.virtual_axes: Dict[str, float] = {}
         self.lock = threading.Lock()
+        self.gamepad = None  # Always initialize gamepad attribute
         
         # Try to import gamepad library if available
         self.gamepad_available = False
@@ -658,7 +659,6 @@ class GamepadHandler(InputHandlerBase):
             import vgamepad as vg
             self.vg = vg
             self.gamepad_available = True
-            self.gamepad = None
             logger.info("Virtual gamepad support available")
         except ImportError:
             logger.warning("vgamepad not installed, gamepad emulation disabled")

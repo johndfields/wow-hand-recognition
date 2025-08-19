@@ -18,9 +18,7 @@
   "adaptive_quality": true,
   "show_preview": true,
   "show_statistics": true,
-  "show_debug_info": true,
-  "show_hand_landmarks": true,
-  "show_hand_connections": true,
+  "show_debug_info": false,
   "ui_scale": 1.0,
   "theme": "dark",
   "enable_sound_feedback": true,
@@ -31,6 +29,5 @@
   "voice_commands": false,
   "require_confirmation": false,
   "camera_indicator": true,
-  "log_actions": true,
-  "hand_preference": "right"
+  "log_actions": true
 }
