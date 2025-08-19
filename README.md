@@ -61,6 +61,11 @@ Run with enhanced features:
 python src/main.py --threading --adaptive --hot-reload
 ```
 
+For best performance (recommended):
+```bash
+python src/main.py --threading --gpu --adaptive
+```
+
 ## 🎮 Gesture Mappings
 
 ### Default Gestures
@@ -95,29 +100,35 @@ python src/main.py --threading --adaptive --hot-reload
 python src/main.py [options]
 ```
 
-**Camera Options:**
-- `--camera INDEX`: Camera index (default: 0)
-- `--auto-camera`: Auto-select best camera
+### Detailed Command Line Flags
 
-**Configuration Options:**
-- `--config-dir PATH`: Configuration directory
-- `--profile NAME`: Load specific profile
-- `--hot-reload`: Enable configuration hot-reload
+| Flag | Description | Default | Effect |
+|------|-------------|---------|--------|
+| `--camera INDEX` | Specifies which camera to use | `0` (first camera) | Useful if you have multiple cameras connected |
+| `--auto-camera` | Automatically selects the best camera | Disabled | Uses `CameraSelector` to find the most suitable camera |
+| `--config-dir PATH` | Path to configuration directory | `./config` | Change where config files are stored/loaded from |
+| `--profile NAME` | Load a specific profile | `Gaming` (if available) | Loads gesture mappings from a named profile (e.g., Gaming, Productivity) |
+| `--hot-reload` | Enable configuration hot-reload | Disabled | Allows changing config files without restarting the app |
+| `--threading` | Enable multi-threading | Disabled | Processes gestures in a separate thread for better performance |
+| `--gpu` | Enable GPU acceleration | Disabled | Uses GPU for MediaPipe hand tracking (faster detection) |
+| `--adaptive` | Enable adaptive quality | Disabled | Dynamically adjusts camera resolution based on performance |
+| `--custom-gestures` | Enable custom gesture detection | Disabled | Loads custom gestures from a model file |
+| `--model-path PATH` | Path to custom gesture model | None | Specifies which custom gesture model to load |
+| `--voice-commands` | Enable voice commands | Disabled | Allows controlling the app with voice |
+| `--system-tray` | Run in system tray | Disabled | Adds a system tray icon for quick access |
+| `--debug` | Enable debug mode | Disabled | Shows additional debug information on screen |
+| `--verbose` | Enable verbose logging | Disabled | Increases logging detail level |
 
-**Performance Options:**
-- `--threading`: Enable multi-threading
-- `--gpu`: Enable GPU acceleration
-- `--adaptive`: Enable adaptive quality
+### Key Differences Between Flags
 
-**Feature Options:**
-- `--custom-gestures`: Enable custom gesture detection
-- `--model-path PATH`: Path to custom gesture model
-- `--voice-commands`: Enable voice commands
-- `--system-tray`: Run in system tray
+**`--threading` vs `--gpu`**:
+- `--threading`: Runs gesture processing in a separate thread, preventing the UI from freezing during detection. This improves responsiveness but doesn't necessarily speed up the actual detection.
+- `--gpu`: Uses GPU acceleration for the MediaPipe hand tracking model, which speeds up the actual detection process. This makes hand tracking faster and more accurate, especially on computers with decent GPUs.
 
-**Debug Options:**
-- `--debug`: Enable debug mode
-- `--verbose`: Enable verbose logging
+For maximum performance, use both together:
+```bash
+python src/main.py --threading --gpu --adaptive
+```
 
 ### Configuration Files
 
@@ -171,6 +182,7 @@ While the application is running:
 | S | Save settings |
 | H | Show help |
 | 1-9 | Switch profile by number |
+| B | Cycle hand preference (right → left → both) |
 
 ## 🔧 Advanced Features
 
@@ -332,7 +344,7 @@ hand_to_key/
 
 ## 💡 Tips
 
-1. **For Gaming**: Use the Gaming profile with `--threading` for best performance
+1. **For Gaming**: Use the Gaming profile with `--threading --gpu` for best performance
 2. **For Presentations**: Use Presentation profile with swipe gestures
 3. **For Accessibility**: Enable `--voice-commands` and accessibility mode
 4. **For Development**: Use `--debug --verbose` for detailed logging
@@ -382,3 +394,4 @@ You can adjust collision sensitivity in `config/settings.json`:
 ---
 
 **Need Help?** Open an issue on GitHub or check the troubleshooting section above.
+
