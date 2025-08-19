@@ -12,6 +12,7 @@
   "enable_temporal_smoothing": true,
   "smoothing_window": 3,
   "min_gesture_frames": 2,
+  "long_press_gesture_frames": 6,
   "enable_gpu": true,
   "frame_skip": 0,
   "processing_threads": 2,

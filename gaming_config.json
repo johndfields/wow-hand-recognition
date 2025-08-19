@@ -7,6 +7,7 @@
   "stable_frames": 3,
   "sensitivity": 1.0,
   "cooldown": 0.7,
+  "long_press_gesture_frames": 6,
   "hand": "right",
   "mappings": {
     "open_palm": {
@@ -37,7 +38,9 @@
     "thumbs_up": {
       "action": "key",
       "target": "tab",
-      "mode": "tap"
+      "mode": "long_press",
+      "duration": 0.2,
+      "required_hold_frames": 6
     },
     "pinch_index": {
       "action": "key",

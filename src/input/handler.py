@@ -2,7 +2,7 @@
 Enhanced input handler module with support for keyboard, mouse, and gamepad inputs.
 """
 
-from typing import Dict, List, Optional, Any, Tuple, Union
+from typing import Dict, List, Optional, Any, Tuple, Union, Set
 from dataclasses import dataclass, field
 from enum import Enum
 import time
@@ -830,6 +830,10 @@ class UnifiedInputHandler:
         self.macros: Dict[str, InputSequence] = {}
         self.gesture_bindings: Dict[str, Union[InputAction, InputSequence]] = {}
         
+        # Gesture state tracking for hold mode functionality
+        self.active_gestures: Set[str] = set()
+        self.gesture_hold_states: Dict[str, Dict[str, Any]] = {}  # Track what keys/actions are held by each gesture
+        
         # Statistics
         self.stats = {
             'actions_executed': 0,
@@ -872,11 +876,14 @@ class UnifiedInputHandler:
             logger.info(f"Unbound gesture '{gesture_name}'")
     
     def execute_gesture(self, gesture_name: str) -> bool:
-        """Execute the action bound to a gesture."""
+        """Execute the action bound to a gesture with state tracking for hold mode."""
         if gesture_name not in self.gesture_bindings:
             return False
         
         action = self.gesture_bindings[gesture_name]
+        
+        # Track gesture activation for hold mode management
+        self._activate_gesture(gesture_name, action)
         
         if isinstance(action, InputAction):
             return self.execute_action(action)
@@ -1022,3 +1029,80 @@ class UnifiedInputHandler:
             'errors': 0,
             'avg_execution_time': 0.0
         }
+    
+    def _activate_gesture(self, gesture_name: str, action: Union[InputAction, InputSequence]):
+        """Track gesture activation for hold mode functionality."""
+        self.active_gestures.add(gesture_name)
+        
+        # Track what this gesture is holding (for release mechanism)
+        if isinstance(action, InputAction) and action.mode == InputMode.HOLD:
+            if gesture_name not in self.gesture_hold_states:
+                self.gesture_hold_states[gesture_name] = {}
+            
+            self.gesture_hold_states[gesture_name] = {
+                'action': action,
+                'activated_time': time.time()
+            }
+            
+            logger.debug(f"Activated hold gesture: {gesture_name} -> {action.target}")
+    
+    def _deactivate_gesture(self, gesture_name: str):
+        """Deactivate a gesture and release any held inputs."""
+        if gesture_name in self.active_gestures:
+            self.active_gestures.remove(gesture_name)
+        
+        # Release any held inputs for this gesture
+        if gesture_name in self.gesture_hold_states:
+            hold_state = self.gesture_hold_states[gesture_name]
+            action = hold_state['action']
+            
+            # Create and execute release action
+            release_action = self._create_release_action(action)
+            if release_action:
+                self.execute_action(release_action)
+                logger.debug(f"Released hold gesture: {gesture_name} -> {action.target}")
+            
+            del self.gesture_hold_states[gesture_name]
+    
+    def _create_release_action(self, original_action: InputAction) -> Optional[InputAction]:
+        """Create a release action for a hold action."""
+        if original_action.input_type == InputType.KEY_HOLD:
+            return InputAction(
+                input_type=InputType.KEY_RELEASE,
+                target=original_action.target,
+                mode=InputMode.TAP
+            )
+        elif original_action.input_type == InputType.MOUSE_HOLD:
+            return InputAction(
+                input_type=InputType.MOUSE_RELEASE,
+                target=original_action.target,
+                mode=InputMode.TAP
+            )
+        # Add more release types as needed
+        return None
+    
+    def update_active_gestures(self, current_gestures: Set[str]):
+        """Update active gestures and release keys for gestures that are no longer detected.
+        
+        This method should be called from the main application with the set of currently 
+        detected gestures to ensure proper hold/release functionality.
+        """
+        # Find gestures that are no longer active
+        gestures_to_deactivate = self.active_gestures - current_gestures
+        
+        # Deactivate gestures that are no longer detected
+        for gesture_name in gestures_to_deactivate:
+            self._deactivate_gesture(gesture_name)
+        
+        # Update active gestures to current set
+        self.active_gestures = current_gestures.copy()
+        
+        logger.debug(f"Active gestures updated: {current_gestures}")
+    
+    def get_active_gestures(self) -> Set[str]:
+        """Get the set of currently active gestures."""
+        return self.active_gestures.copy()
+    
+    def get_hold_states(self) -> Dict[str, Dict[str, Any]]:
+        """Get the current gesture hold states."""
+        return self.gesture_hold_states.copy()

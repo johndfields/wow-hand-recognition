@@ -115,15 +115,16 @@ class StandardGestureDetector(GestureDetectorBase):
         GestureType.PINCH_PINKY: 12,
         # Advanced gestures have high priority
         GestureType.ROCK_ON: 10,
+        # FIST has higher priority than THUMBS_UP to avoid conflicts during transitions
+        GestureType.FIST: 9,
         # Gaming profile gestures
         GestureType.L_SHAPE: 8,
         GestureType.HANG_LOOSE: 8,
         # Basic hand shapes have medium priority
-        GestureType.THUMBS_UP: 8,
         GestureType.VICTORY: 7,
+        GestureType.THUMBS_UP: 7,  # Lower priority than fist to resolve conflicts
         GestureType.THREE: 7,
         GestureType.INDEX_ONLY: 7,
-        GestureType.FIST: 6,
         GestureType.OPEN_PALM: 5,
         # Motion gestures have lower priority by default
         GestureType.SWIPE_LEFT: 4,
@@ -166,9 +167,18 @@ class StandardGestureDetector(GestureDetectorBase):
         self.gesture_confidences: Dict[GestureType, float] = {}
         
     def detect(self, landmarks: Any) -> Set[GestureType]:
-        """Detect all applicable gestures from hand landmarks."""
+        """Detect all applicable gestures from hand landmarks with performance optimizations."""
         gestures = set()
         self.gesture_confidences = {}
+        
+        # Cache expensive finger extension calculations to avoid redundant computation
+        self._cached_finger_states = {
+            'thumb': self._thumb_extended(landmarks),
+            'index': self._finger_extended(landmarks, 8, 6),
+            'middle': self._finger_extended(landmarks, 12, 10),
+            'ring': self._finger_extended(landmarks, 16, 14),
+            'pinky': self._finger_extended(landmarks, 20, 18)
+        }
         
         # Detect pinch gestures first (higher priority)
         has_pinch = False
@@ -196,15 +206,22 @@ class StandardGestureDetector(GestureDetectorBase):
         # Basic gesture detection - skip open palm if pinch is detected
         if not has_pinch and self._is_open_palm(landmarks):
             gestures.add(GestureType.OPEN_PALM)
-        if self._is_fist(landmarks):
+        
+        # Detect fist first (higher priority than thumbs up)
+        has_fist = False
+        if self._is_fist_optimized(landmarks):
             gestures.add(GestureType.FIST)
+            has_fist = True
+        
         if self._is_victory(landmarks):
             gestures.add(GestureType.VICTORY)
         if self._is_three_fingers(landmarks):
             gestures.add(GestureType.THREE)
         if self._is_index_only(landmarks):
             gestures.add(GestureType.INDEX_ONLY)
-        if self._is_thumbs_up(landmarks):
+        
+        # Only check thumbs up if fist is not detected (performance optimization and conflict resolution)
+        if not has_fist and self._is_thumbs_up_optimized(landmarks):
             gestures.add(GestureType.THUMBS_UP)
             
         # Motion gestures
@@ -212,6 +229,9 @@ class StandardGestureDetector(GestureDetectorBase):
             motion_gesture = self._detect_motion_gesture(landmarks)
             if motion_gesture:
                 gestures.add(motion_gesture)
+        
+        # Clear cached finger states after detection
+        self._cached_finger_states = None
         
         # Apply mutual exclusion rules based on priorities
         return self._resolve_gesture_conflicts(gestures)
@@ -672,6 +692,178 @@ class StandardGestureDetector(GestureDetectorBase):
         if thumb_curled: score += 0.175
         
         return score
+    
+    def _is_fist_optimized(self, landmarks: List[Any]) -> bool:
+        """Optimized fist detection using cached finger states to avoid redundant calculations."""
+        # Use cached finger states if available
+        if hasattr(self, '_cached_finger_states') and self._cached_finger_states is not None:
+            is_fist = not any([
+                self._cached_finger_states['index'],
+                self._cached_finger_states['middle'],
+                self._cached_finger_states['ring'],
+                self._cached_finger_states['pinky'],
+                self._cached_finger_states['thumb']
+            ])
+        else:
+            # Fallback to regular detection if caching is not available
+            is_fist = not any([
+                self._finger_extended(landmarks, 8, 6),
+                self._finger_extended(landmarks, 12, 10),
+                self._finger_extended(landmarks, 16, 14),
+                self._finger_extended(landmarks, 20, 18),
+                self._thumb_extended(landmarks)
+            ])
+        
+        if is_fist:
+            # Calculate confidence with enhanced scoring for fist vs thumbs up disambiguation
+            confidence = self._get_fist_confidence_optimized(landmarks)
+            self.gesture_confidences[GestureType.FIST] = confidence
+        
+        return is_fist
+    
+    def _is_thumbs_up_optimized(self, landmarks: List[Any]) -> bool:
+        """Optimized thumbs up detection with enhanced requirements to avoid false positives and conflicts with fist."""
+        # Use cached finger states if available for better performance
+        if hasattr(self, '_cached_finger_states') and self._cached_finger_states is not None:
+            # Basic thumbs up detection: thumb extended, other fingers curled
+            is_thumbs_up_basic = (
+                self._cached_finger_states['thumb'] and
+                not self._cached_finger_states['index'] and
+                not self._cached_finger_states['middle'] and
+                not self._cached_finger_states['ring'] and
+                not self._cached_finger_states['pinky']
+            )
+        else:
+            # Fallback to regular detection if caching is not available
+            is_thumbs_up_basic = (
+                self._thumb_extended(landmarks) and
+                not self._finger_extended(landmarks, 8, 6) and
+                not self._finger_extended(landmarks, 12, 10) and
+                not self._finger_extended(landmarks, 16, 14) and
+                not self._finger_extended(landmarks, 20, 18)
+            )
+        
+        if not is_thumbs_up_basic:
+            return False
+        
+        # Enhanced requirements for thumbs up to avoid false positives during fist transitions
+        # Check thumb position relative to other fingers - thumb should be clearly extended upward
+        thumb_tip = landmarks[4]
+        thumb_base = landmarks[2]
+        wrist = landmarks[0]
+        
+        # Thumb should be significantly higher than wrist and thumb base
+        thumb_vertical_extension = abs(thumb_tip.y - wrist.y) / abs(thumb_base.y - wrist.y + 1e-6)
+        
+        # Check that fingers are well-curled (not just barely curled)
+        finger_curl_scores = []
+        for tip_idx, pip_idx in [(8, 6), (12, 10), (16, 14), (20, 18)]:
+            tip = landmarks[tip_idx]
+            pip = landmarks[pip_idx]
+            # Finger should be curled significantly
+            curl_ratio = self._l2_distance(tip, wrist) / (self._l2_distance(pip, wrist) + 1e-6)
+            finger_curl_scores.append(1.0 - min(1.0, max(0.0, curl_ratio - 0.8) / 0.4))  # Normalize curl score
+        
+        avg_curl_score = np.mean(finger_curl_scores)
+        
+        # Stricter requirements: thumb must be clearly extended and fingers clearly curled
+        is_clear_thumbs_up = (
+            thumb_vertical_extension > 1.2 and  # Thumb clearly extended relative to base
+            avg_curl_score > 0.7  # Fingers clearly curled
+        )
+        
+        if is_clear_thumbs_up:
+            # Calculate confidence with stricter scoring
+            confidence = self._get_thumbs_up_confidence_optimized(landmarks, thumb_vertical_extension, avg_curl_score)
+            self.gesture_confidences[GestureType.THUMBS_UP] = confidence
+        
+        return is_clear_thumbs_up
+    
+    def _get_fist_confidence_optimized(self, landmarks: List[Any]) -> float:
+        """Optimized confidence calculation for fist gesture with enhanced scoring vs thumbs up."""
+        # Use cached states for efficiency if available
+        if hasattr(self, '_cached_finger_states') and self._cached_finger_states is not None:
+            # All fingers and thumb should be curled
+            curl_score = sum([
+                not self._cached_finger_states['index'],
+                not self._cached_finger_states['middle'],
+                not self._cached_finger_states['ring'],
+                not self._cached_finger_states['pinky'],
+                not self._cached_finger_states['thumb']
+            ]) / 5.0
+        else:
+            # Fallback calculation
+            curl_score = sum([
+                not self._finger_extended(landmarks, 8, 6),
+                not self._finger_extended(landmarks, 12, 10),
+                not self._finger_extended(landmarks, 16, 14),
+                not self._finger_extended(landmarks, 20, 18),
+                not self._thumb_extended(landmarks)
+            ]) / 5.0
+        
+        # Enhanced confidence calculation
+        finger_scores = []
+        wrist = landmarks[0]
+        
+        # Check how curled each finger actually is
+        for tip_idx, pip_idx in [(8, 6), (12, 10), (16, 14), (20, 18)]:
+            tip = landmarks[tip_idx]
+            pip = landmarks[pip_idx]
+            curl_ratio = self._l2_distance(tip, wrist) / (self._l2_distance(pip, wrist) + 1e-6)
+            finger_scores.append(min(1.0, (1.2 - curl_ratio) / 0.3))
+        
+        # Include thumb curl score
+        thumb_tip = landmarks[4]
+        thumb_pip = landmarks[3]
+        thumb_curl_ratio = self._l2_distance(thumb_tip, wrist) / (self._l2_distance(thumb_pip, wrist) + 1e-6)
+        finger_scores.append(min(1.0, (1.2 - thumb_curl_ratio) / 0.3))
+        
+        # Combine basic curl score with detailed finger analysis
+        detailed_score = np.mean(finger_scores)
+        final_confidence = (curl_score * 0.4 + detailed_score * 0.6)
+        
+        # Boost confidence if this is clearly a fist (all fingers well-curled)
+        if curl_score >= 1.0 and detailed_score > 0.8:
+            final_confidence = min(1.0, final_confidence + 0.1)
+        
+        return final_confidence
+    
+    def _get_thumbs_up_confidence_optimized(self, landmarks: List[Any], 
+                                           thumb_extension: float, finger_curl: float) -> float:
+        """Optimized confidence calculation for thumbs up with stricter requirements."""
+        # Base confidence from finger states
+        if hasattr(self, '_cached_finger_states') and self._cached_finger_states is not None:
+            thumb_extended = self._cached_finger_states['thumb']
+            fingers_curled_score = sum([
+                not self._cached_finger_states['index'],
+                not self._cached_finger_states['middle'],
+                not self._cached_finger_states['ring'],
+                not self._cached_finger_states['pinky']
+            ]) / 4.0
+        else:
+            # Fallback calculation
+            thumb_extended = self._thumb_extended(landmarks)
+            fingers_curled_score = sum([
+                not self._finger_extended(landmarks, 8, 6),
+                not self._finger_extended(landmarks, 12, 10),
+                not self._finger_extended(landmarks, 16, 14),
+                not self._finger_extended(landmarks, 20, 18)
+            ]) / 4.0
+        
+        # Enhanced confidence based on stricter criteria
+        base_confidence = (float(thumb_extended) * 0.3 + fingers_curled_score * 0.3)
+        
+        # Add bonuses for clear thumb extension and finger curling
+        extension_bonus = min(0.2, (thumb_extension - 1.2) * 0.5)  # Bonus for clear thumb extension
+        curl_bonus = min(0.2, (finger_curl - 0.7) * 0.67)  # Bonus for clear finger curling
+        
+        final_confidence = base_confidence + extension_bonus + curl_bonus
+        
+        # Penalty if the gesture is ambiguous (could be transitioning to/from fist)
+        if thumb_extension < 1.4 or finger_curl < 0.8:
+            final_confidence *= 0.9  # Small penalty for ambiguous cases
+        
+        return min(1.0, max(0.0, final_confidence))
 
 
 class CustomGestureDetector(GestureDetectorBase):
@@ -802,11 +994,18 @@ class GestureProcessor:
         self.last_reported_gestures: Dict[int, Set[GestureType]] = {}
         self.gesture_stability_count: Dict[Tuple[int, GestureType], int] = {}
         
-        # Threading
-        self.processing_queue = queue.Queue(maxsize=30)
-        self.result_queue = queue.Queue(maxsize=30)
+        # Optimized threading with dynamic queue sizes
+        # Adjust queue sizes based on performance characteristics
+        queue_size = 10 if enable_gpu else 5  # GPU can handle larger queues
+        self.processing_queue = queue.Queue(maxsize=queue_size)
+        self.result_queue = queue.Queue(maxsize=queue_size)
         self.processing_thread = None
         self.is_running = False
+        
+        # Performance monitoring for dynamic adjustments
+        self.performance_samples = []
+        self.max_performance_samples = 100
+        self.queue_adjustment_counter = 0
         
         # Statistics
         self.stats = {
@@ -817,14 +1016,14 @@ class GestureProcessor:
             'gesture_stability': 0.0
         }
         
-        # Initialize MediaPipe Hands with error handling
+        # Initialize MediaPipe Hands with error handling and performance optimization
         try:
             self.hands = self.mp_hands.Hands(
                 static_image_mode=False,
                 max_num_hands=self.max_hands,
-                model_complexity=1,  # Use model complexity 1 for better compatibility
+                model_complexity=0,  # Use model complexity 0 for better performance
                 min_detection_confidence=max(0.5, confidence_threshold * 0.8),  # Lower detection threshold for redetection
-                min_tracking_confidence=max(0.3, confidence_threshold * 0.6)    # Lower tracking threshold for persistence
+                min_tracking_confidence=max(0.5, confidence_threshold * 0.8)    # Slightly higher tracking threshold for stability
             )
             self.mediapipe_initialized = True
         except Exception as e:
@@ -849,11 +1048,15 @@ class GestureProcessor:
             logger.info("Gesture processor stopped")
     
     def process_frame(self, frame: np.ndarray) -> List[GestureDetection]:
-        """Process a single frame and return detected gestures."""
+        """Process a single frame and return detected gestures with optimized performance."""
         self.frame_counter += 1
         
-        # Frame skipping for performance
-        if self.frame_skip > 0 and self.frame_counter % (self.frame_skip + 1) != 0:
+        # Frame skipping for performance - use more aggressive skipping if processing is slow
+        skip_factor = self.frame_skip + 1
+        if self.stats['avg_processing_time'] > 0.05:  # If processing is slow (>50ms)
+            skip_factor += 1  # Skip more frames
+        
+        if self.frame_skip > 0 and self.frame_counter % skip_factor != 0:
             return []
         
         # Raw detections before temporal filtering
@@ -868,18 +1071,31 @@ class GestureProcessor:
             return []
         
         try:
-            # Convert to RGB
+            # Optimize frame preprocessing - resize if frame is too large
+            height, width = frame.shape[:2]
+            if width > 1280 or height > 720:
+                # Downsample large frames for better performance
+                scale_factor = min(1280 / width, 720 / height)
+                new_width = int(width * scale_factor)
+                new_height = int(height * scale_factor)
+                frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+            
+            # Convert to RGB with optimized color space conversion
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            # Ensure frame is contiguous for better MediaPipe performance
+            if not rgb_frame.flags['C_CONTIGUOUS']:
+                rgb_frame = np.ascontiguousarray(rgb_frame)
             
             # Process with MediaPipe
             start_time = time.time()
             results = self.hands.process(rgb_frame)
             processing_time = time.time() - start_time
             
-            # Update statistics
+            # Update statistics with exponential smoothing
             self.stats['frames_processed'] += 1
             self.stats['avg_processing_time'] = (
-                0.9 * self.stats['avg_processing_time'] + 0.1 * processing_time
+                0.85 * self.stats['avg_processing_time'] + 0.15 * processing_time
             )
             
             # Handle hand redetection and persistence

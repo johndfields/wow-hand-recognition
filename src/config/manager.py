@@ -170,6 +170,7 @@ class ConfigSchema:
             "enable_temporal_smoothing": {"type": "boolean"},
             "smoothing_window": {"type": "integer", "minimum": 1, "maximum": 10},
             "min_gesture_frames": {"type": "integer", "minimum": 1, "maximum": 10},
+            "long_press_gesture_frames": {"type": "integer", "minimum": 1, "maximum": 20},
             "enable_gpu": {"type": "boolean"},
             "frame_skip": {"type": "integer", "minimum": 0},
             "processing_threads": {"type": "integer", "minimum": 1},
@@ -211,9 +212,9 @@ class ConfigFileHandler(FileSystemEventHandler):
         file_path = event.src_path
         current_time = time.time()
         
-        # Debounce rapid modifications
+        # Debounce rapid modifications - increased debounce time
         if file_path in self.last_reload:
-            if current_time - self.last_reload[file_path] < 1.0:
+            if current_time - self.last_reload[file_path] < 2.0:  # Increased from 1.0 to 2.0 seconds
                 return
         
         self.last_reload[file_path] = current_time
@@ -678,7 +679,7 @@ class ConfigurationManager:
             GestureMapping("l_shape", "key", "a", "hold"),
             GestureMapping("hang_loose", "key", "d", "hold"),
             GestureMapping("index_only", "mouse", "right_click", "tap"),
-            GestureMapping("thumbs_up", "key", "tab", "tap"),
+            GestureMapping("thumbs_up", "key", "tab", "hold"),
             GestureMapping("pinch_index", "key", "1", "tap"),
             GestureMapping("pinch_middle", "key", "2", "tap"),
             GestureMapping("pinch_ring", "key", "3", "tap"),

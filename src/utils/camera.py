@@ -259,28 +259,32 @@ class CameraManager:
     
     def _adjust_quality(self):
         """Adjust quality based on performance."""
-        if len(self.fps_history) < 5:
+        if len(self.fps_history) < 10:  # Wait for more data before adjusting
             return
         
         avg_fps = np.mean(self.fps_history)
         target_fps_ratio = avg_fps / self.target_fps
         
-        # Adjust quality level based on FPS
-        if target_fps_ratio < 0.7 and self.quality_level > 0:
-            # Decrease quality
-            self.quality_level -= 1
-            new_resolution = self.quality_resolutions[self.quality_level]
-            self._set_resolution(*new_resolution)
-            logger.info(f"Decreased quality to level {self.quality_level}: {new_resolution}")
-            self.fps_history.clear()
+        # More conservative thresholds to reduce frequent changes
+        if target_fps_ratio < 0.6 and self.quality_level > 0:  # Lower threshold
+            # Only decrease if consistently poor performance
+            recent_fps = np.mean(self.fps_history[-5:])
+            if recent_fps / self.target_fps < 0.65:
+                self.quality_level -= 1
+                new_resolution = self.quality_resolutions[self.quality_level]
+                self._set_resolution(*new_resolution)
+                logger.info(f"Decreased quality to level {self.quality_level}: {new_resolution}")
+                self.fps_history.clear()
             
-        elif target_fps_ratio > 0.95 and self.quality_level < 2:
-            # Increase quality
-            self.quality_level += 1
-            new_resolution = self.quality_resolutions[self.quality_level]
-            self._set_resolution(*new_resolution)
-            logger.info(f"Increased quality to level {self.quality_level}: {new_resolution}")
-            self.fps_history.clear()
+        elif target_fps_ratio > 1.1 and self.quality_level < 2:  # Higher threshold
+            # Only increase if consistently good performance and current level stable
+            recent_fps = np.mean(self.fps_history[-5:])
+            if recent_fps / self.target_fps > 1.05:
+                self.quality_level += 1
+                new_resolution = self.quality_resolutions[self.quality_level]
+                self._set_resolution(*new_resolution)
+                logger.info(f"Increased quality to level {self.quality_level}: {new_resolution}")
+                self.fps_history.clear()
     
     def get_fps(self) -> float:
         """Get current FPS."""

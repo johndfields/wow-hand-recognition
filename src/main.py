@@ -106,7 +106,10 @@ class HandToKeyApplication:
             self.config_manager.activate_profile(self.args.profile)
         elif not self.config_manager.active_profile:
             profiles = self.config_manager.get_all_profiles()
-            if profiles:
+            # Prefer Gaming profile as default, fall back to first available
+            if "Gaming" in profiles:
+                self.config_manager.activate_profile("Gaming")
+            elif profiles:
                 self.config_manager.activate_profile(profiles[0])
         
         # Start hot-reload if enabled
@@ -265,7 +268,7 @@ class HandToKeyApplication:
                 continue
             
             # Create input action
-            input_type = self._get_input_type(mapping.action_type)
+            input_type = self._get_input_type(mapping.action_type, mapping.mode)
             input_mode = self._get_input_mode(mapping.mode)
             
             action = InputAction(
@@ -279,15 +282,24 @@ class HandToKeyApplication:
             self.input_handler.bind_gesture(mapping.gesture, action)
             logger.debug(f"Bound gesture '{mapping.gesture}' to {mapping.action_type}:{mapping.target}")
     
-    def _get_input_type(self, action_type: str) -> InputType:
-        """Convert action type string to InputType enum."""
-        type_map = {
-            'key': InputType.KEY_PRESS,
-            'mouse': InputType.MOUSE_CLICK,
-            'gamepad': InputType.GAMEPAD_BUTTON,
-            'macro': InputType.MACRO
-        }
-        return type_map.get(action_type, InputType.KEY_PRESS)
+    def _get_input_type(self, action_type: str, mode: str = "tap") -> InputType:
+        """Convert action type and mode to InputType enum."""
+        if action_type == 'key':
+            if mode == 'hold':
+                return InputType.KEY_HOLD
+            else:
+                return InputType.KEY_PRESS
+        elif action_type == 'mouse':
+            if mode == 'hold':
+                return InputType.MOUSE_HOLD
+            else:
+                return InputType.MOUSE_CLICK
+        elif action_type == 'gamepad':
+            return InputType.GAMEPAD_BUTTON
+        elif action_type == 'macro':
+            return InputType.MACRO
+        else:
+            return InputType.KEY_PRESS
     
     def _get_input_mode(self, mode: str) -> InputMode:
         """Convert mode string to InputMode enum."""
@@ -396,9 +408,15 @@ class HandToKeyApplication:
         else:
             detections = self.gesture_processor.process_frame(frame)
         
+        # Extract currently detected gesture names for state tracking
+        current_gesture_names = {detection.gesture_type.value for detection in detections}
+        
         # Process detections
         for detection in detections:
             self._handle_gesture(detection)
+        
+        # Update gesture state management for hold/release functionality
+        self.input_handler.update_active_gestures(current_gesture_names)
         
         # Update gesture history
         self.state.gesture_history.extend(detections)

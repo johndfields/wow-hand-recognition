@@ -72,12 +72,14 @@
       "gesture": "thumbs_up",
       "action_type": "key",
       "target": "home",
-      "mode": "tap",
-      "duration": 0.0,
+      "mode": "long_press",
+      "duration": 0.2,
       "cooldown": 0.0,
       "sensitivity": 1.0,
       "enabled": true,
-      "metadata": {}
+      "metadata": {
+        "required_hold_frames": 6
+      }
     },
     {
       "gesture": "pinch_index",
