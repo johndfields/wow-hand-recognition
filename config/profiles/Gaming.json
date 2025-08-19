@@ -25,7 +25,7 @@
       "metadata": {}
     },
     {
-      "gesture": "victory",
+      "gesture": "l_shape",
       "action_type": "key",
       "target": "a",
       "mode": "hold",
@@ -36,7 +36,7 @@
       "metadata": {}
     },
     {
-      "gesture": "three",
+      "gesture": "hang_loose",
       "action_type": "key",
       "target": "d",
       "mode": "hold",
@@ -47,9 +47,20 @@
       "metadata": {}
     },
     {
+      "gesture": "index_only",
+      "action_type": "mouse",
+      "target": "right_click",
+      "mode": "tap",
+      "duration": 0.0,
+      "cooldown": 0.0,
+      "sensitivity": 1.0,
+      "enabled": true,
+      "metadata": {}
+    },
+    {
       "gesture": "thumbs_up",
       "action_type": "key",
-      "target": "space",
+      "target": "tab",
       "mode": "tap",
       "duration": 0.0,
       "cooldown": 0.0,
@@ -100,20 +111,13 @@
       "sensitivity": 1.0,
       "enabled": true,
       "metadata": {}
-    },
-    {
-      "gesture": "index_only",
-      "action_type": "mouse",
-      "target": "right_click",
-      "mode": "tap",
-      "duration": 0.0,
-      "cooldown": 0.0,
-      "sensitivity": 1.0,
-      "enabled": true,
-      "metadata": {}
     }
   ],
-  "settings": {},
+  "settings": {
+    "gesture_sensitivity": 1.0,
+    "min_gesture_frames": 3,
+    "confidence_threshold": 0.6
+  },
   "parent_profile": null,
-  "is_active": true
+  "is_active": false
 }

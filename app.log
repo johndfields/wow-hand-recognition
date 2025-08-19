@@ -1,0 +1,83 @@
+2025-08-18 09:33:28,118 - __main__ - INFO - Starting application in modular mode
+2025-08-18 09:33:28,367 - matplotlib - DEBUG - matplotlib data path: /Users/johnfields/Documents/code/hand_to_key/.venv/lib/python3.11/site-packages/matplotlib/mpl-data
+2025-08-18 09:33:28,370 - matplotlib - DEBUG - CONFIGDIR=/Users/johnfields/.matplotlib
+2025-08-18 09:33:28,371 - matplotlib - DEBUG - interactive is False
+2025-08-18 09:33:28,371 - matplotlib - DEBUG - platform is darwin
+2025-08-18 09:33:28,416 - matplotlib - DEBUG - CACHEDIR=/Users/johnfields/.matplotlib
+2025-08-18 09:33:28,418 - matplotlib.font_manager - DEBUG - Using fontManager instance from /Users/johnfields/.matplotlib/fontlist-v390.json
+2025-08-18 09:33:28,874 - config.manager - INFO - Loaded settings from config/settings.json
+2025-08-18 09:33:28,877 - config.manager - INFO - Loaded profile 'Productivity' from config/profiles/productivity.json
+2025-08-18 09:33:28,879 - config.manager - INFO - Loaded profile 'Presentation' from config/profiles/presentation.json
+2025-08-18 09:33:28,882 - config.manager - INFO - Loaded profile 'Gaming' from config/profiles/gaming.json
+2025-08-18 09:33:28,885 - config.manager - INFO - Saved profile 'Productivity' to config/profiles/Productivity.json
+2025-08-18 09:33:28,885 - config.manager - INFO - Activated profile 'Productivity'
+2025-08-18 09:36:53,349 - __main__ - INFO - Starting application in modular mode
+2025-08-18 09:36:53,587 - matplotlib - DEBUG - matplotlib data path: /Users/johnfields/Documents/code/hand_to_key/.venv/lib/python3.11/site-packages/matplotlib/mpl-data
+2025-08-18 09:36:53,591 - matplotlib - DEBUG - CONFIGDIR=/Users/johnfields/.matplotlib
+2025-08-18 09:36:53,591 - matplotlib - DEBUG - interactive is False
+2025-08-18 09:36:53,591 - matplotlib - DEBUG - platform is darwin
+2025-08-18 09:36:53,644 - matplotlib - DEBUG - CACHEDIR=/Users/johnfields/.matplotlib
+2025-08-18 09:36:53,646 - matplotlib.font_manager - DEBUG - Using fontManager instance from /Users/johnfields/.matplotlib/fontlist-v390.json
+2025-08-18 09:36:54,073 - config.manager - INFO - Loaded settings from config/settings.json
+2025-08-18 09:36:54,076 - config.manager - INFO - Loaded profile 'Productivity' from config/profiles/productivity.json
+2025-08-18 09:36:54,079 - config.manager - INFO - Loaded profile 'Presentation' from config/profiles/presentation.json
+2025-08-18 09:36:54,081 - config.manager - INFO - Loaded profile 'Gaming' from config/profiles/gaming.json
+2025-08-18 09:36:54,084 - config.manager - INFO - Saved profile 'Productivity' to config/profiles/Productivity.json
+2025-08-18 09:36:54,084 - config.manager - INFO - Activated profile 'Productivity'
+2025-08-18 09:36:54,087 - config.manager - INFO - Saved profile 'Productivity' to config/profiles/Productivity.json
+2025-08-18 09:36:54,090 - config.manager - INFO - Saved profile 'Gaming' to config/profiles/Gaming.json
+2025-08-18 09:36:54,090 - config.manager - INFO - Activated profile 'Gaming'
+2025-08-18 09:59:54,504 - __main__ - INFO - Starting application in modular mode
+2025-08-18 09:59:54,792 - matplotlib - DEBUG - matplotlib data path: /Users/johnfields/Documents/code/hand_to_key/.venv/lib/python3.11/site-packages/matplotlib/mpl-data
+2025-08-18 09:59:54,795 - matplotlib - DEBUG - CONFIGDIR=/Users/johnfields/.matplotlib
+2025-08-18 09:59:54,795 - matplotlib - DEBUG - interactive is False
+2025-08-18 09:59:54,795 - matplotlib - DEBUG - platform is darwin
+2025-08-18 09:59:54,831 - matplotlib - DEBUG - CACHEDIR=/Users/johnfields/.matplotlib
+2025-08-18 09:59:54,833 - matplotlib.font_manager - DEBUG - Using fontManager instance from /Users/johnfields/.matplotlib/fontlist-v390.json
+2025-08-18 09:59:55,243 - config.manager - INFO - Loaded settings from config/settings.json
+2025-08-18 09:59:55,246 - config.manager - INFO - Loaded profile 'Productivity' from config/profiles/productivity.json
+2025-08-18 09:59:55,248 - config.manager - INFO - Loaded profile 'Presentation' from config/profiles/presentation.json
+2025-08-18 09:59:55,251 - config.manager - INFO - Loaded profile 'Gaming' from config/profiles/gaming.json
+2025-08-18 09:59:55,254 - config.manager - INFO - Saved profile 'Productivity' to config/profiles/Productivity.json
+2025-08-18 09:59:55,254 - config.manager - INFO - Activated profile 'Productivity'
+2025-08-18 09:59:55,257 - config.manager - INFO - Saved profile 'Productivity' to config/profiles/Productivity.json
+2025-08-18 09:59:55,259 - config.manager - INFO - Saved profile 'Gaming' to config/profiles/Gaming.json
+2025-08-18 09:59:55,259 - config.manager - INFO - Activated profile 'Gaming'
+2025-08-18 09:59:55,260 - config.manager - INFO - Saved settings to config/settings.json
+2025-08-18 09:59:55,260 - config.manager - INFO - Updated settings with 4 values
+2025-08-18 10:11:42,376 - __main__ - INFO - Starting application in modular mode
+2025-08-18 10:11:42,716 - matplotlib - DEBUG - matplotlib data path: /Users/johnfields/Documents/code/hand_to_key/.venv/lib/python3.11/site-packages/matplotlib/mpl-data
+2025-08-18 10:11:42,720 - matplotlib - DEBUG - CONFIGDIR=/Users/johnfields/.matplotlib
+2025-08-18 10:11:42,720 - matplotlib - DEBUG - interactive is False
+2025-08-18 10:11:42,720 - matplotlib - DEBUG - platform is darwin
+2025-08-18 10:11:42,759 - matplotlib - DEBUG - CACHEDIR=/Users/johnfields/.matplotlib
+2025-08-18 10:11:42,760 - matplotlib.font_manager - DEBUG - Using fontManager instance from /Users/johnfields/.matplotlib/fontlist-v390.json
+2025-08-18 10:11:43,214 - config.manager - INFO - Loaded settings from config/settings.json
+2025-08-18 10:11:43,217 - config.manager - INFO - Loaded profile 'Productivity' from config/profiles/productivity.json
+2025-08-18 10:11:43,220 - config.manager - INFO - Loaded profile 'Presentation' from config/profiles/Presentation.json
+2025-08-18 10:11:43,222 - config.manager - INFO - Loaded profile 'Gaming' from config/profiles/gaming.json
+2025-08-18 10:11:43,225 - config.manager - INFO - Saved profile 'Productivity' to config/profiles/Productivity.json
+2025-08-18 10:11:43,225 - config.manager - INFO - Activated profile 'Productivity'
+2025-08-18 10:11:43,228 - config.manager - INFO - Saved profile 'Productivity' to config/profiles/Productivity.json
+2025-08-18 10:11:43,231 - config.manager - INFO - Saved profile 'Gaming' to config/profiles/Gaming.json
+2025-08-18 10:11:43,231 - config.manager - INFO - Activated profile 'Gaming'
+2025-08-18 10:11:43,231 - config.manager - INFO - Saved settings to config/settings.json
+2025-08-18 10:11:43,231 - config.manager - INFO - Updated settings with 4 values
+2025-08-18 10:11:56,366 - __main__ - INFO - Starting application in modular mode
+2025-08-18 10:11:56,534 - matplotlib - DEBUG - matplotlib data path: /Users/johnfields/Documents/code/hand_to_key/.venv/lib/python3.11/site-packages/matplotlib/mpl-data
+2025-08-18 10:11:56,540 - matplotlib - DEBUG - CONFIGDIR=/Users/johnfields/.matplotlib
+2025-08-18 10:11:56,543 - matplotlib - DEBUG - interactive is False
+2025-08-18 10:11:56,543 - matplotlib - DEBUG - platform is darwin
+2025-08-18 10:11:56,577 - matplotlib - DEBUG - CACHEDIR=/Users/johnfields/.matplotlib
+2025-08-18 10:11:56,580 - matplotlib.font_manager - DEBUG - Using fontManager instance from /Users/johnfields/.matplotlib/fontlist-v390.json
+2025-08-18 10:11:56,936 - config.manager - INFO - Loaded settings from config/settings.json
+2025-08-18 10:11:56,939 - config.manager - INFO - Loaded profile 'Productivity' from config/profiles/productivity.json
+2025-08-18 10:11:56,941 - config.manager - INFO - Loaded profile 'Presentation' from config/profiles/Presentation.json
+2025-08-18 10:11:56,944 - config.manager - INFO - Loaded profile 'Gaming' from config/profiles/gaming.json
+2025-08-18 10:11:56,947 - config.manager - INFO - Saved profile 'Productivity' to config/profiles/Productivity.json
+2025-08-18 10:11:56,947 - config.manager - INFO - Activated profile 'Productivity'
+2025-08-18 10:11:56,949 - config.manager - INFO - Saved profile 'Productivity' to config/profiles/Productivity.json
+2025-08-18 10:11:56,952 - config.manager - INFO - Saved profile 'Gaming' to config/profiles/Gaming.json
+2025-08-18 10:11:56,952 - config.manager - INFO - Activated profile 'Gaming'
+2025-08-18 10:11:56,952 - config.manager - INFO - Saved settings to config/settings.json
+2025-08-18 10:11:56,952 - config.manager - INFO - Updated settings with 4 values

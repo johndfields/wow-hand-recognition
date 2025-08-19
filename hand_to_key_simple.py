@@ -14,9 +14,21 @@ import json
 import time
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Any
+from typing import Dict, List, Optional, Set, Any, Tuple
 from dataclasses import dataclass
 from enum import Enum
+import sys
+import os
+
+# Add src to path to import our improved gesture detection
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from src.gestures.detector import StandardGestureDetector, GestureType as SrcGestureType
+    IMPROVED_DETECTION_AVAILABLE = True
+    print("✅ Using improved gesture detection from src module")
+except ImportError:
+    IMPROVED_DETECTION_AVAILABLE = False
+    print("⚠️ Improved gesture detection not available, using built-in detection")
 
 # Configure logging
 logging.basicConfig(
@@ -57,9 +69,52 @@ class HandGestureDetector:
     
     def __init__(self, sensitivity: float = 1.0):
         self.sensitivity = sensitivity
+        
+        # Initialize improved detector if available
+        if IMPROVED_DETECTION_AVAILABLE:
+            self.improved_detector = StandardGestureDetector(
+                sensitivity=sensitivity,
+                enable_motion_gestures=False,
+                enable_custom_gestures=False
+            )
+            
+            # Create mapping from src.gestures.detector.GestureType to our GestureType
+            self.gesture_mapping = {
+                SrcGestureType.OPEN_PALM: GestureType.OPEN_PALM.value,
+                SrcGestureType.FIST: GestureType.FIST.value,
+                SrcGestureType.INDEX_ONLY: GestureType.ONE_FINGER.value,
+                SrcGestureType.VICTORY: GestureType.TWO_FINGERS.value,
+                SrcGestureType.THREE: GestureType.THREE_FINGERS.value,
+                SrcGestureType.THUMBS_UP: GestureType.THUMBS_UP.value,
+                SrcGestureType.PINCH_INDEX: GestureType.PINCH_INDEX.value,
+                SrcGestureType.PINCH_MIDDLE: GestureType.PINCH_MIDDLE.value,
+                SrcGestureType.PINCH_RING: GestureType.PINCH_RING.value,
+                SrcGestureType.PINCH_PINKY: GestureType.PINCH_PINKY.value
+            }
     
     def detect_gestures(self, landmarks) -> Set[str]:
         """Detect all active gestures from hand landmarks."""
+        # Use improved detection if available
+        if IMPROVED_DETECTION_AVAILABLE:
+            return self._detect_gestures_improved(landmarks)
+        else:
+            return self._detect_gestures_builtin(landmarks)
+    
+    def _detect_gestures_improved(self, landmarks) -> Set[str]:
+        """Use the improved gesture detector from src module."""
+        # Detect gestures using the improved detector
+        src_gestures = self.improved_detector.detect(landmarks)
+        
+        # Map from src.gestures.detector.GestureType to our GestureType
+        gestures = set()
+        for gesture in src_gestures:
+            if gesture in self.gesture_mapping:
+                gestures.add(self.gesture_mapping[gesture])
+        
+        return gestures
+    
+    def _detect_gestures_builtin(self, landmarks) -> Set[str]:
+        """Use the built-in gesture detection."""
         gestures = set()
         
         # Check pinch gestures first (they take priority)

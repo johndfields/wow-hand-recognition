@@ -310,29 +310,34 @@ class KeyboardHandler(InputHandlerBase):
             'page_down': Key.page_down, 'pagedown': Key.page_down,
             'shift': Key.shift, 'ctrl': Key.ctrl, 'control': Key.ctrl,
             'alt': Key.alt, 'cmd': Key.cmd, 'win': Key.cmd, 'windows': Key.cmd,
-            'caps_lock': Key.caps_lock, 'capslock': Key.caps_lock,
-            'pause': Key.pause, 'insert': Key.insert,
-            'menu': Key.menu
+            'caps_lock': Key.caps_lock, 'capslock': Key.caps_lock
         }
         
-        # Add platform-specific keys if they exist
+        # Add menu key if available (not available on macOS)
         try:
-            mapping['print_screen'] = Key.print_screen
-            mapping['printscreen'] = Key.print_screen
+            mapping['menu'] = Key.menu
         except AttributeError:
-            pass
+            logger.debug("Key 'menu' not available on this platform, skipping")
         
-        try:
-            mapping['num_lock'] = Key.num_lock
-            mapping['numlock'] = Key.num_lock
-        except AttributeError:
-            pass
-            
-        try:
-            mapping['scroll_lock'] = Key.scroll_lock
-            mapping['scrolllock'] = Key.scroll_lock
-        except AttributeError:
-            pass
+        # Add platform-specific keys if they exist
+        # These keys may not be available on all platforms (especially macOS)
+        platform_specific_keys = [
+            ('pause', 'pause'),
+            ('insert', 'insert'),
+            ('print_screen', 'print_screen'),
+            ('printscreen', 'print_screen'),
+            ('num_lock', 'num_lock'),
+            ('numlock', 'num_lock'),
+            ('scroll_lock', 'scroll_lock'),
+            ('scrolllock', 'scroll_lock')
+        ]
+        
+        for key_name, attr_name in platform_specific_keys:
+            try:
+                mapping[key_name] = getattr(Key, attr_name)
+            except AttributeError:
+                logger.debug(f"Key '{attr_name}' not available on this platform, skipping")
+                pass
             
         return mapping
     
@@ -646,6 +651,7 @@ class GamepadHandler(InputHandlerBase):
         self.virtual_buttons: Dict[str, bool] = {}
         self.virtual_axes: Dict[str, float] = {}
         self.lock = threading.Lock()
+        self.gamepad = None  # Always initialize gamepad attribute
         
         # Try to import gamepad library if available
         self.gamepad_available = False
@@ -653,7 +659,6 @@ class GamepadHandler(InputHandlerBase):
             import vgamepad as vg
             self.vg = vg
             self.gamepad_available = True
-            self.gamepad = None
             logger.info("Virtual gamepad support available")
         except ImportError:
             logger.warning("vgamepad not installed, gamepad emulation disabled")

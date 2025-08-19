@@ -164,7 +164,11 @@ class HandToKeyApplication:
             max_hands=settings.max_hands,
             enable_gpu=settings.enable_gpu,
             frame_skip=settings.frame_skip,
-            confidence_threshold=settings.min_detection_confidence
+            confidence_threshold=settings.min_detection_confidence,
+            temporal_smoothing=settings.enable_temporal_smoothing,
+            smoothing_window=settings.smoothing_window,
+            min_gesture_frames=settings.min_gesture_frames,
+            hand_preference=settings.hand_preference
         )
         
         # Start processing thread if threading enabled
@@ -188,7 +192,8 @@ class HandToKeyApplication:
             show_statistics=settings.show_statistics,
             show_debug_info=settings.show_debug_info,
             ui_scale=settings.ui_scale,
-            theme=settings.theme
+            theme=settings.theme,
+            config_manager=self.config_manager
         )
         
         # Create calibration mode
@@ -298,11 +303,14 @@ class HandToKeyApplication:
     def _on_config_reload(self, file_path: Any):
         """Handle configuration reload event."""
         logger.info(f"Configuration reloaded: {file_path}")
-        self._update_gesture_bindings()
+        
+        # Only update gesture bindings if input handler is initialized
+        if hasattr(self, 'input_handler'):
+            self._update_gesture_bindings()
         
         # Update settings
         settings = self.config_manager.settings
-        if self.audio_feedback:
+        if hasattr(self, 'audio_feedback') and self.audio_feedback:
             self.audio_feedback.set_volume(settings.sound_volume)
             self.audio_feedback.set_enabled(settings.enable_sound_feedback)
     
@@ -399,9 +407,16 @@ class HandToKeyApplication:
         
         # Render overlay
         if self.config_manager.settings.show_preview:
-            # Draw debug info
-            if self.config_manager.settings.show_debug_info:
-                frame = self.gesture_processor.draw_debug_info(frame, detections)
+            # Draw hand tracking visualization if landmarks or connections are enabled
+            if (self.config_manager.settings.show_hand_landmarks or 
+                self.config_manager.settings.show_hand_connections or
+                self.config_manager.settings.show_debug_info):
+                frame = self.gesture_processor.draw_debug_info(
+                    frame, 
+                    detections,
+                    show_landmarks=self.config_manager.settings.show_hand_landmarks,
+                    show_connections=self.config_manager.settings.show_hand_connections
+                )
             
             # Draw overlay
             frame = self.overlay_renderer.render(
@@ -439,11 +454,29 @@ class HandToKeyApplication:
         if success and self.audio_feedback:
             self.audio_feedback.play_gesture_sound(gesture_name)
         
-        # Update statistics
-        self.stats_tracker.record_gesture(gesture_name, success)
+        # Update statistics with confidence
+        confidence = getattr(detection, 'confidence', 1.0)
+        self.stats_tracker.record_gesture(gesture_name, success, confidence)
+        
+        # Add notification for successful gestures in detailed mode
+        if success and self.overlay_renderer.display_mode in ["detailed", "debug"]:
+            action_text = self._get_gesture_action_text(gesture_name)
+            if action_text:
+                self.overlay_renderer.add_notification(f"{self.overlay_renderer._format_gesture_name(gesture_name)} → {action_text}", 1.0)
+    
+    def _get_gesture_action_text(self, gesture_name: str) -> str:
+        """Get action text for a gesture."""
+        if not self.config_manager.active_profile:
+            return ""
+        
+        for mapping in self.config_manager.active_profile.gesture_mappings:
+            if mapping.gesture == gesture_name:
+                return mapping.target.upper()
+        
+        return ""
     
     def _handle_keyboard(self, key: int):
-        """Handle keyboard input."""
+        """Handle keyboard input with enhanced overlay controls."""
         if key == ord('q'):
             self.stop()
         elif key == ord('p'):
@@ -456,12 +489,65 @@ class HandToKeyApplication:
             self.save_settings()
         elif key == ord('h'):
             self.show_help()
+        elif key == ord('d'):
+            # Toggle display mode
+            self.overlay_renderer.toggle_display_mode()
+            self.overlay_renderer.add_notification(f"Display mode: {self.overlay_renderer.display_mode.title()}", 2.0)
+        elif key == ord('t'):
+            # Toggle theme
+            current_theme = self.overlay_renderer.theme
+            new_theme = "light" if current_theme == "dark" else "dark"
+            self.overlay_renderer.set_theme(new_theme)
+            self.overlay_renderer.add_notification(f"Theme: {new_theme.title()}", 2.0)
+        elif key == ord('m'):
+            # Toggle statistics display
+            self.overlay_renderer.show_statistics = not self.overlay_renderer.show_statistics
+            status = "ON" if self.overlay_renderer.show_statistics else "OFF"
+            self.overlay_renderer.add_notification(f"Statistics: {status}", 2.0)
+        elif key == ord('k'):
+            # Toggle keybindings panel
+            self.overlay_renderer.show_keybindings = not self.overlay_renderer.show_keybindings
+            status = "ON" if self.overlay_renderer.show_keybindings else "OFF"
+            self.overlay_renderer.add_notification(f"Keybindings: {status}", 2.0)
+        elif key == ord('=') or key == ord('+'):
+            # Increase UI scale
+            self.overlay_renderer.ui_scale = min(2.0, self.overlay_renderer.ui_scale + 0.1)
+            self.overlay_renderer.add_notification(f"UI Scale: {self.overlay_renderer.ui_scale:.1f}", 1.5)
+        elif key == ord('-') or key == ord('_'):
+            # Decrease UI scale
+            self.overlay_renderer.ui_scale = max(0.5, self.overlay_renderer.ui_scale - 0.1)
+            self.overlay_renderer.add_notification(f"UI Scale: {self.overlay_renderer.ui_scale:.1f}", 1.5)
+        elif key == ord('l'):
+            # Toggle hand landmarks
+            self.config_manager.settings.show_hand_landmarks = not self.config_manager.settings.show_hand_landmarks
+            status = "ON" if self.config_manager.settings.show_hand_landmarks else "OFF"
+            self.overlay_renderer.add_notification(f"Hand Landmarks: {status}", 2.0)
+        elif key == ord('j'):
+            # Toggle hand connections
+            self.config_manager.settings.show_hand_connections = not self.config_manager.settings.show_hand_connections
+            status = "ON" if self.config_manager.settings.show_hand_connections else "OFF"
+            self.overlay_renderer.add_notification(f"Hand Connections: {status}", 2.0)
+        elif key == ord('b'):
+            # Cycle through hand preferences: right -> left -> both -> right
+            current = self.config_manager.settings.hand_preference
+            if current == "right":
+                new_pref = "left"
+            elif current == "left":
+                new_pref = "both"
+            else:  # both
+                new_pref = "right"
+            
+            self.config_manager.settings.hand_preference = new_pref
+            self.gesture_processor.hand_preference = new_pref
+            self.overlay_renderer.add_notification(f"Hand Preference: {new_pref.title()}", 2.0)
+            logger.info(f"Hand preference changed to: {new_pref}")
         elif key >= ord('1') and key <= ord('9'):
             # Switch profile by number
             profile_idx = key - ord('1')
             profiles = self.config_manager.get_all_profiles()
             if profile_idx < len(profiles):
                 self.switch_profile(profiles[profile_idx])
+                self.overlay_renderer.add_notification(f"Switched to: {profiles[profile_idx]}", 2.0)
     
     def _get_stats(self) -> Dict[str, Any]:
         """Get current statistics."""
@@ -588,13 +674,31 @@ class HandToKeyApplication:
         help_text = """
         Hand to Key - Keyboard Shortcuts:
         
+        Basic Controls:
         q - Quit application
         p - Pause/Resume
+        h - Show this help
+        s - Save settings
+        
+        Profiles:
+        1-9 - Switch to profile by number
+        
+        Hand Tracking:
+        b - Cycle hand preference (right → left → both)
+        l - Toggle hand landmarks visualization
+        j - Toggle hand connections visualization
+        d - Toggle debug/visualization mode
+        
+        Recording & Calibration:
         c - Start/Stop calibration
         r - Start/Stop macro recording
-        s - Save settings
-        h - Show this help
-        1-9 - Switch to profile by number
+        
+        Display:
+        t - Toggle theme (dark/light)
+        m - Toggle statistics display
+        k - Toggle keybindings panel
+        +/= - Increase UI scale
+        -/_ - Decrease UI scale
         """
         logger.info(help_text)
         print(help_text)

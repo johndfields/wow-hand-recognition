@@ -71,6 +71,11 @@ class ApplicationSettings:
     enable_multi_hand: bool = False
     max_hands: int = 2
     
+    # Gesture filtering settings
+    enable_temporal_smoothing: bool = True
+    smoothing_window: int = 3
+    min_gesture_frames: int = 2
+    
     # Performance settings
     enable_gpu: bool = True
     frame_skip: int = 0
@@ -81,6 +86,8 @@ class ApplicationSettings:
     show_preview: bool = True
     show_statistics: bool = True
     show_debug_info: bool = False
+    show_hand_landmarks: bool = True
+    show_hand_connections: bool = True
     ui_scale: float = 1.0
     theme: str = "dark"
     
@@ -98,6 +105,9 @@ class ApplicationSettings:
     require_confirmation: bool = False
     camera_indicator: bool = True
     log_actions: bool = True
+    
+    # Hand preference settings
+    hand_preference: str = "right"  # "left", "right", or "both"
     
     # Paths
     config_dir: str = "./config"
@@ -157,6 +167,9 @@ class ConfigSchema:
             "gesture_sensitivity": {"type": "number", "minimum": 0.1, "maximum": 3.0},
             "enable_multi_hand": {"type": "boolean"},
             "max_hands": {"type": "integer", "minimum": 1, "maximum": 4},
+            "enable_temporal_smoothing": {"type": "boolean"},
+            "smoothing_window": {"type": "integer", "minimum": 1, "maximum": 10},
+            "min_gesture_frames": {"type": "integer", "minimum": 1, "maximum": 10},
             "enable_gpu": {"type": "boolean"},
             "frame_skip": {"type": "integer", "minimum": 0},
             "processing_threads": {"type": "integer", "minimum": 1},
@@ -164,6 +177,8 @@ class ConfigSchema:
             "show_preview": {"type": "boolean"},
             "show_statistics": {"type": "boolean"},
             "show_debug_info": {"type": "boolean"},
+            "show_hand_landmarks": {"type": "boolean"},
+            "show_hand_connections": {"type": "boolean"},
             "ui_scale": {"type": "number", "minimum": 0.5, "maximum": 3.0},
             "theme": {"type": "string", "enum": ["light", "dark", "auto"]},
             "enable_sound_feedback": {"type": "boolean"},
@@ -174,7 +189,8 @@ class ConfigSchema:
             "voice_commands": {"type": "boolean"},
             "require_confirmation": {"type": "boolean"},
             "camera_indicator": {"type": "boolean"},
-            "log_actions": {"type": "boolean"}
+            "log_actions": {"type": "boolean"},
+            "hand_preference": {"type": "string", "enum": ["left", "right", "both"]}
         },
         "additionalProperties": False
     }
@@ -659,14 +675,14 @@ class ConfigurationManager:
         gaming_mappings = [
             GestureMapping("open_palm", "key", "w", "hold"),
             GestureMapping("fist", "key", "s", "hold"),
-            GestureMapping("victory", "key", "a", "hold"),
-            GestureMapping("three", "key", "d", "hold"),
-            GestureMapping("thumbs_up", "key", "space", "tap"),
+            GestureMapping("l_shape", "key", "a", "hold"),
+            GestureMapping("hang_loose", "key", "d", "hold"),
+            GestureMapping("index_only", "mouse", "right_click", "tap"),
+            GestureMapping("thumbs_up", "key", "tab", "tap"),
             GestureMapping("pinch_index", "key", "1", "tap"),
             GestureMapping("pinch_middle", "key", "2", "tap"),
             GestureMapping("pinch_ring", "key", "3", "tap"),
-            GestureMapping("pinch_pinky", "key", "4", "tap"),
-            GestureMapping("index_only", "mouse", "right_click", "tap")
+            GestureMapping("pinch_pinky", "key", "4", "tap")
         ]
         
         gaming_profile.gesture_mappings = gaming_mappings

@@ -341,8 +341,43 @@ hand_to_key/
 
 1. Voice commands require additional dependencies (see requirements.txt)
 2. Gamepad emulation only works on Windows with vgamepad
-3. Some gestures may conflict - use profiles to separate use cases
+3. Some gestures may conflict - use profiles to separate use cases or rely on the enhanced collision detection system
 4. Background subtraction works best with static backgrounds
+
+## 🔄 Collision Detection System
+
+The application includes an advanced collision detection system to handle conflicting gestures:
+
+### Key Features
+
+- **Priority-Based Resolution**: Gestures are assigned priority levels (pinch gestures have higher priority than open palm)
+- **Confidence Scoring**: Each gesture has a confidence score based on how well it matches the expected hand pose
+- **Temporal Filtering**: Gestures must be consistently detected over multiple frames to be considered stable
+- **Mutually Exclusive Groups**: Physically impossible gesture combinations are automatically resolved
+- **Graduated Confidence Penalties**: Borderline cases receive proportional confidence penalties
+
+### Common Collision Cases
+
+| Collision | Resolution Strategy |
+|-----------|---------------------|
+| Pinch vs. Open Palm | Pinch takes precedence (higher priority) |
+| Multiple Pinch Types | Highest confidence pinch is selected |
+| Basic Hand Shapes | Highest confidence shape is selected |
+| Transitional Gestures | Temporal filtering prevents rapid switching |
+
+### Customizing Collision Handling
+
+You can adjust collision sensitivity in `config/settings.json`:
+
+```json
+{
+  "gesture_detection": {
+    "collision_sensitivity": 0.8,
+    "min_gesture_frames": 3,
+    "confidence_threshold": 0.4
+  }
+}
+```
 
 ---
 
